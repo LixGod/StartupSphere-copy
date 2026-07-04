@@ -1,0 +1,31 @@
+{
+  "name": "StartupSphere",
+  "short_name": "StartupSphere",
+  "description": "AI-Powered Business Operating System — Manage operations, automate workflows, and scale faster.",
+  "start_url": "/dashboard/overview",
+  "display": "standalone",
+  "background_color": "#0f1419",
+  "theme_color": "#2563eb",
+  "orientation": "any",
+  "icons": [
+    {
+      "src": "/icon-dark-32x32.png",
+      "sizes": "32x32",
+      "type": "image/png"
+    },
+    {
+      "src": "/apple-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ],
+  "categories": ["business", "productivity", "finance"],
+  "lang": "en",
+  "dir": "ltr"
+}

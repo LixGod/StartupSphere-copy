@@ -1,0 +1,387 @@
+app/admin/page.tsx(80,16): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(54,68): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(54,73): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(55,66): error TS7006: Parameter 'sum' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(55,71): error TS7006: Parameter 'o' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(61,54): error TS7006: Parameter 'o' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(64,37): error TS7006: Parameter 'item' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(66,7): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+app/api/ai/ask/route.ts(66,29): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+app/api/ai/ask/route.ts(70,31): error TS18046: 'b' is of type 'unknown'.
+app/api/ai/ask/route.ts(70,35): error TS18046: 'a' is of type 'unknown'.
+app/api/ai/ask/route.ts(85,31): error TS7006: Parameter 'p' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(88,53): error TS7006: Parameter 'o' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(92,37): error TS7006: Parameter 'i' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(95,43): error TS7006: Parameter 'e' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(96,46): error TS7006: Parameter 'c' implicitly has an 'any' type.
+app/api/ai/ask/route.ts(97,45): error TS7006: Parameter 'd' implicitly has an 'any' type.
+app/dashboard/accounting/page.tsx(255,120): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string | URL | undefined'.
+  Type 'null' is not assignable to type 'string | URL | undefined'.
+app/dashboard/accounting/page.tsx(278,123): error TS2345: Argument of type 'string | null' is not assignable to parameter of type 'string | URL | undefined'.
+  Type 'null' is not assignable to type 'string | URL | undefined'.
+app/dashboard/crm/page.tsx(104,11): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/dashboard/crm/page.tsx(259,19): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+app/dashboard/crm/page.tsx(260,19): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/dashboard/crm/page.tsx(268,19): error TS2322: Type 'string | null' is not assignable to type 'string'.
+  Type 'null' is not assignable to type 'string'.
+app/dashboard/crm/page.tsx(269,19): error TS2322: Type 'string | undefined' is not assignable to type 'string'.
+  Type 'undefined' is not assignable to type 'string'.
+app/dashboard/inventory/page.tsx(776,16): error TS2304: Cannot find name 'Package'.
+app/dashboard/sales/page.tsx(175,9): error TS2353: Object literal may only specify known properties, and 'payment_status' does not exist in type 'Partial<SalesOrder> & { owner_id: string; created_by: string; total_amount: number; }'.
+app/dashboard/sales/page.tsx(256,9): error TS2353: Object literal may only specify known properties, and 'payment_status' does not exist in type 'Partial<SalesOrder> & { owner_id: string; created_by: string; total_amount: number; }'.
+components/founder-crm/AddLeadModal.tsx(8,25): error TS7031: Binding element 'isOpen' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(8,33): error TS7031: Binding element 'onClose' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(8,42): error TS7031: Binding element 'onLeadAdded' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(8,55): error TS7031: Binding element 'stages' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(23,24): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(24,25): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(25,25): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(26,27): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(27,25): error TS2339: Property 'context' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(28,28): error TS2339: Property 'stage_id' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(29,32): error TS2339: Property 'linkedin_url' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(38,31): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(57,36): error TS2339: Property 'context' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(59,30): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/AddLeadModal.tsx(82,25): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/AddLeadModal.tsx(147,27): error TS7006: Parameter 's' implicitly has an 'any' type.
+components/founder-crm/AddLeadModal.tsx(156,61): error TS2322: Type 'string' is not assignable to type 'number'.
+components/founder-crm/Auth.tsx(24,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/Auth.tsx(35,13): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/AutomationHub.tsx(107,25): error TS2698: Spread types may only be created from object types.
+components/founder-crm/AutomationHub.tsx(117,41): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/AutomationHub.tsx(123,27): error TS7006: Parameter 'status' implicitly has an 'any' type.
+components/founder-crm/AutomationHub.tsx(169,30): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(170,103): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(170,112): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(171,55): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(172,92): error TS2339: Property 'channels' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(186,36): error TS2345: Argument of type '{ name: string; starter_message: string; followup_message: string; positive_reply_message: string; negative_reply_message: string; channels: string[]; followup_delay_hours: number; }' is not assignable to parameter of type 'SetStateAction<null>'.
+  Type '{ name: string; starter_message: string; followup_message: string; positive_reply_message: string; negative_reply_message: string; channels: string[]; followup_delay_hours: number; }' provides no match for the signature '(prevState: null): null'.
+components/founder-crm/AutomationHub.tsx(203,63): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(203,104): error TS2698: Spread types may only be created from object types.
+components/founder-crm/AutomationHub.tsx(228,59): error TS2339: Property 'channels' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(229,49): error TS2339: Property 'channels' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(229,65): error TS7006: Parameter 'c' implicitly has an 'any' type.
+components/founder-crm/AutomationHub.tsx(230,53): error TS2339: Property 'channels' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(231,49): error TS2698: Spread types may only be created from object types.
+components/founder-crm/AutomationHub.tsx(233,94): error TS2339: Property 'channels' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(243,65): error TS2339: Property 'followup_delay_hours' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(243,122): error TS2698: Spread types may only be created from object types.
+components/founder-crm/AutomationHub.tsx(261,101): error TS2698: Spread types may only be created from object types.
+components/founder-crm/AutomationHub.tsx(262,25): error TS2322: Type 'string' is not assignable to type 'number'.
+components/founder-crm/AutomationHub.tsx(282,29): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(284,119): error TS2339: Property 'status' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(285,26): error TS2339: Property 'status' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(286,26): error TS2339: Property 'status' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(291,75): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(292,87): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(297,30): error TS2339: Property 'job_type' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(301,39): error TS2339: Property 'scheduled_for' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(307,135): error TS2339: Property 'status' does not exist on type 'never'.
+components/founder-crm/AutomationHub.tsx(308,26): error TS2339: Property 'status' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(8,22): error TS7031: Binding element 'stages' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(8,30): error TS7031: Binding element 'onImportComplete' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(14,21): error TS7006: Parameter 'text' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(18,45): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(19,39): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(20,40): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(21,42): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(22,40): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(26,31): error TS7006: Parameter 'line' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(27,40): error TS7006: Parameter 'c' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(34,15): error TS7006: Parameter 'r' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(37,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(44,31): error TS18047: 'ev.target' is possibly 'null'.
+components/founder-crm/CSVImport.tsx(60,33): error TS18047: 'ev.target' is possibly 'null'.
+components/founder-crm/CSVImport.tsx(63,33): error TS7006: Parameter 'p' implicitly has an 'any' type.
+components/founder-crm/CSVImport.tsx(83,13): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/CSVImport.tsx(108,26): error TS2531: Object is possibly 'null'.
+components/founder-crm/CSVImport.tsx(113,60): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(119,132): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(122,20): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(122,31): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(122,41): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/CSVImport.tsx(122,58): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(24,43): error TS7006: Parameter 's' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(25,43): error TS7006: Parameter 's' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(26,43): error TS7006: Parameter 's' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(29,39): error TS7006: Parameter 'l' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(30,39): error TS7006: Parameter 'l' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(31,39): error TS7006: Parameter 'l' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(32,41): error TS7006: Parameter 'm' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(33,40): error TS7006: Parameter 'm' implicitly has an 'any' type.
+components/founder-crm/Dashboard.tsx(36,9): error TS2353: Object literal may only specify known properties, and 'totalLeads' does not exist in type '(prevState: null) => null'.
+components/founder-crm/Dashboard.tsx(69,45): error TS2339: Property 'totalLeads' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(70,48): error TS2339: Property 'activeFollowups' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(71,46): error TS2339: Property 'qualifiedLeads' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(72,46): error TS2339: Property 'conversionRate' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(111,76): error TS2339: Property 'outbound' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(115,77): error TS2339: Property 'inbound' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(119,76): error TS2339: Property 'replyRate' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(123,75): error TS2339: Property 'contacted' does not exist on type 'never'.
+components/founder-crm/Dashboard.tsx(144,70): error TS2339: Property 'totalLeads' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(42,13): error TS7034: Variable 'conversations' implicitly has type 'any[]' in some locations where its type cannot be determined.
+components/founder-crm/GlobalInbox.tsx(45,20): error TS7006: Parameter 'msg' implicitly has an 'any' type.
+components/founder-crm/GlobalInbox.tsx(62,19): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+components/founder-crm/GlobalInbox.tsx(62,19): error TS7005: Variable 'conversations' implicitly has an 'any[]' type.
+components/founder-crm/GlobalInbox.tsx(64,27): error TS7005: Variable 'conversations' implicitly has an 'any[]' type.
+components/founder-crm/GlobalInbox.tsx(67,53): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/GlobalInbox.tsx(74,7): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(75,7): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(100,33): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(100,80): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(101,136): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(103,86): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(105,36): error TS2339: Property 'latestMessage' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(108,89): error TS2339: Property 'lead' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(110,25): error TS2339: Property 'latestMessage' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(111,25): error TS2339: Property 'latestMessage' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(113,61): error TS2339: Property 'unreadCount' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(114,27): error TS2339: Property 'latestMessage' does not exist on type 'never'.
+components/founder-crm/GlobalInbox.tsx(114,87): error TS2339: Property 'latestMessage' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(27,82): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+components/founder-crm/KanbanBoard.tsx(29,20): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(31,20): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(31,44): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(32,41): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(34,47): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(94,18): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(100,35): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/KanbanBoard.tsx(112,34): error TS7006: Parameter 'targetStageId' implicitly has an 'any' type.
+components/founder-crm/KanbanBoard.tsx(115,14): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(115,59): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/KanbanBoard.tsx(115,61): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(115,69): error TS2698: Spread types may only be created from object types.
+components/founder-crm/KanbanBoard.tsx(135,55): error TS2339: Property 'stage_id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(135,75): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(137,34): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(143,62): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ Lead: string; Contacted: string; Proposal: string; Negotiation: string; Won: string; }'.
+components/founder-crm/KanbanBoard.tsx(143,81): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(147,108): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(154,32): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(180,57): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{ Lead: string; Contacted: string; Proposal: string; Negotiation: string; Won: string; }'.
+components/founder-crm/KanbanBoard.tsx(180,83): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(184,79): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(192,78): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(208,46): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(208,67): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(209,40): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(209,53): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(209,60): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(224,34): error TS2339: Property 'stage_id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(224,61): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(225,34): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(225,95): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(227,36): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(228,50): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/KanbanBoard.tsx(228,55): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(229,81): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(231,43): error TS2322: Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(231,61): error TS2322: Type 'any' is not assignable to type 'never'.
+components/founder-crm/KanbanBoard.tsx(231,66): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(234,171): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/KanbanBoard.tsx(234,176): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(237,33): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(239,49): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/KanbanBoard.tsx(239,54): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(243,83): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(244,115): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(247,33): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(247,188): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(248,33): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(248,163): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(254,33): error TS2339: Property 'last_contacted_at' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(264,38): error TS2339: Property 'stage_id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(264,65): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(284,33): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(287,78): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(289,85): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(289,110): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(290,35): error TS2339: Property 'linkedin_url' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(291,45): error TS2339: Property 'linkedin_url' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(305,29): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(306,46): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(310,29): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(311,49): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(324,73): error TS2339: Property 'context' does not exist on type 'never'.
+components/founder-crm/KanbanBoard.tsx(330,50): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(44,13): error TS7034: Variable 'stagesList' implicitly has type 'any[]' in some locations where its type cannot be determined.
+components/founder-crm/LeadManagement.tsx(47,27): error TS7006: Parameter 's' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(50,11): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+components/founder-crm/LeadManagement.tsx(54,34): error TS2322: Type 'any[]' is not assignable to type 'never[]'.
+  Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(54,40): error TS7005: Variable 'stagesList' implicitly has an 'any[]' type.
+components/founder-crm/LeadManagement.tsx(66,33): error TS7006: Parameter 'sequenceId' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(84,54): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(86,72): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(87,18): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(87,63): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(87,65): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(87,73): error TS2698: Spread types may only be created from object types.
+components/founder-crm/LeadManagement.tsx(87,104): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(94,13): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/LeadManagement.tsx(100,29): error TS7006: Parameter 'lead' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(118,18): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(118,35): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(118,54): error TS2698: Spread types may only be created from object types.
+components/founder-crm/LeadManagement.tsx(122,27): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/LeadManagement.tsx(126,29): error TS7006: Parameter 'id' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(129,46): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(133,23): error TS7006: Parameter 'lead' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(140,9): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(141,9): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(142,9): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(146,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(154,22): error TS18047: 'event.target' is possibly 'null'.
+components/founder-crm/LeadManagement.tsx(155,23): error TS18047: 'text' is possibly 'null'.
+components/founder-crm/LeadManagement.tsx(155,28): error TS2339: Property 'split' does not exist on type 'string | ArrayBuffer'.
+  Property 'split' does not exist on type 'ArrayBuffer'.
+components/founder-crm/LeadManagement.tsx(155,47): error TS7006: Parameter 'l' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(158,63): error TS7006: Parameter 'h' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(173,54): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(173,86): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(174,88): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(178,48): error TS7006: Parameter 'c' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(193,18): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(196,41): error TS18046: 'err' is of type 'unknown'.
+components/founder-crm/LeadManagement.tsx(238,60): error TS7006: Parameter 'newLead' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(239,35): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(266,38): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(266,74): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(268,28): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(284,28): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(287,36): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(287,58): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(287,63): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(287,99): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(287,120): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(292,154): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(292,159): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(292,180): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(292,192): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(297,34): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(297,56): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(297,61): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(297,97): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(297,118): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(299,41): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(299,46): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(305,39): error TS2345: Argument of type 'any' is not assignable to parameter of type 'never'.
+components/founder-crm/LeadManagement.tsx(305,44): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(312,80): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(320,25): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(323,81): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(324,104): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(331,52): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(335,31): error TS2339: Property 'phone' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(341,20): error TS7053: Element implicitly has an 'any' type because expression of type 'any' can't be used to index type '{}'.
+components/founder-crm/LeadManagement.tsx(341,38): error TS2339: Property 'stage_id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(367,33): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(370,78): error TS2339: Property 'name' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(372,85): error TS2339: Property 'company' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(372,110): error TS2339: Property 'email' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(373,35): error TS2339: Property 'linkedin_url' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(374,45): error TS2339: Property 'linkedin_url' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(393,73): error TS2339: Property 'context' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(399,50): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(408,23): error TS7006: Parameter 'newLead' implicitly has an 'any' type.
+components/founder-crm/LeadManagement.tsx(410,22): error TS2345: Argument of type 'any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type 'any[]' is not assignable to type 'never[]'.
+    Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadManagement.tsx(410,39): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/LeadManagement.tsx(412,23): error TS2322: Type 'any' is not assignable to type 'never'.
+components/founder-crm/LeadScraper.tsx(19,24): error TS7031: Binding element 'onLeadsFound' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(19,38): error TS7031: Binding element 'stages' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(32,31): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(56,22): error TS18047: 'response.body' is possibly 'null'.
+components/founder-crm/LeadScraper.tsx(89,25): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/LeadScraper.tsx(96,29): error TS7006: Parameter 'lead' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(129,35): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/LeadScraper.tsx(133,34): error TS7006: Parameter 'lead' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(133,40): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(149,28): error TS18047: 'results' is possibly 'null'.
+components/founder-crm/LeadScraper.tsx(155,20): error TS2698: Spread types may only be created from object types.
+components/founder-crm/LeadScraper.tsx(158,34): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/LeadScraper.tsx(165,30): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(166,27): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(171,20): error TS7006: Parameter 'l' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(196,28): error TS7006: Parameter 'text' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(295,27): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(301,32): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(303,24): error TS2339: Property 'search_metadata' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(305,89): error TS2339: Property 'search_metadata' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(327,26): error TS2339: Property 'leads' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(327,37): error TS7006: Parameter 'lead' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(327,43): error TS7006: Parameter 'idx' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(339,58): error TS7006: Parameter 'tag' implicitly has an 'any' type.
+components/founder-crm/LeadScraper.tsx(425,20): error TS2339: Property 'outreach_intel' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(431,82): error TS2339: Property 'outreach_intel' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(435,83): error TS2339: Property 'outreach_intel' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(439,130): error TS2339: Property 'outreach_intel' does not exist on type 'never'.
+components/founder-crm/LeadScraper.tsx(440,132): error TS2339: Property 'outreach_intel' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(39,29): error TS7006: Parameter 'e' implicitly has an 'any' type.
+components/founder-crm/Settings.tsx(65,13): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/Settings.tsx(71,26): error TS7031: Binding element 'active' implicitly has an 'any' type.
+components/founder-crm/Settings.tsx(71,34): error TS7031: Binding element 'label' implicitly has an 'any' type.
+components/founder-crm/Settings.tsx(98,47): error TS2339: Property 'hasResendKey' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(99,47): error TS2339: Property 'hasWhatsAppConfig' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(100,47): error TS2339: Property 'hasLinkedInKey' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(105,84): error TS2339: Property 'fromEmail' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(123,44): error TS2339: Property 'hasResendKey' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(130,44): error TS2339: Property 'fromEmail' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(153,44): error TS2339: Property 'hasWhatsAppConfig' does not exist on type 'never'.
+components/founder-crm/Settings.tsx(176,42): error TS2339: Property 'hasLinkedInKey' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(8,25): error TS7031: Binding element 'leadId' implicitly has an 'any' type.
+components/founder-crm/UnifiedInbox.tsx(24,11): error TS7006: Parameter 'payload' implicitly has an 'any' type.
+components/founder-crm/UnifiedInbox.tsx(25,21): error TS2345: Argument of type '(prev: never[]) => any[]' is not assignable to parameter of type 'SetStateAction<never[]>'.
+  Type '(prev: never[]) => any[]' is not assignable to type '(prevState: never[]) => never[]'.
+    Type 'any[]' is not assignable to type 'never[]'.
+      Type 'any' is not assignable to type 'never'.
+components/founder-crm/UnifiedInbox.tsx(62,13): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/UnifiedInbox.tsx(68,29): error TS7006: Parameter 'channel' implicitly has an 'any' type.
+components/founder-crm/UnifiedInbox.tsx(88,13): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/UnifiedInbox.tsx(112,13): error TS18046: 'error' is of type 'unknown'.
+components/founder-crm/UnifiedInbox.tsx(125,51): error TS2345: Argument of type '"linkedin"' is not assignable to parameter of type 'null | undefined'.
+components/founder-crm/UnifiedInbox.tsx(151,27): error TS2339: Property 'id' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(151,54): error TS2339: Property 'direction' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(153,21): error TS2339: Property 'direction' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(158,24): error TS2339: Property 'channel' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(159,73): error TS2339: Property 'channel' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(161,73): error TS2339: Property 'content' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(163,33): error TS2339: Property 'sent_at' does not exist on type 'never'.
+components/founder-crm/UnifiedInbox.tsx(173,43): error TS2322: Type 'string' is not assignable to type 'number'.
+lib/hooks/use-business-context.tsx(111,10): error TS7006: Parameter 'payload' implicitly has an 'any' type.
