@@ -2,9 +2,10 @@
 
 import type React from "react"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { usePermissions } from "@/lib/hooks/use-permissions"
+import { useBranch } from "@/components/providers/branch-provider"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -28,6 +29,9 @@ import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "
 import { InvoiceShareButton } from "@/components/whatsapp/invoice-share-button"
 import { VoiceInputButton } from "@/components/ui/voice-input-button"
 import { useVoiceFormFill } from "@/lib/hooks/use-voice-form-fill"
+import { PaymentSheet } from "@/components/ui/payment-sheet"
+import { CustomerSearch } from "@/components/ui/customer-search"
+import { upsertCustomer } from "@/lib/api/customers"
 import {
   Drawer,
   DrawerContent,
@@ -39,7 +43,10 @@ import {
 
 export default function SalesPage() {
   const { profile: businessProfile, formatPrice } = useBusinessContext()
-  const { isOwner, activeBranchId, can } = usePermissions()
+  const { isOwner, can } = usePermissions()
+  const { activeBranchId } = useBranch()
+  const canViewSales = isOwner || can('can_view_sales')
+  const canCreateSales = isOwner || can('can_create_sales')
   const [selectedLocationId, setSelectedLocationId] = useState<string>("global")
   const [locations, setLocations] = useState<any[]>([])
   const [orders, setOrders] = useState<any[]>([])
@@ -47,6 +54,10 @@ export default function SalesPage() {
   const [loading, setLoading] = useState(true)
   const [showCreateSale, setShowCreateSale] = useState(false)
   const [selectedProductId, setSelectedProductId] = useState("")
+  const [paymentSheetState, setPaymentSheetState] = useState<{ open: boolean; order: any | null }>({
+    open: false,
+    order: null,
+  })
   const [saleFormData, setSaleFormData] = useState({
     quantity: "1",
     customerName: "",
@@ -56,6 +67,7 @@ export default function SalesPage() {
     gstRate: "18",
   })
   const [customerDetailsOpen, setCustomerDetailsOpen] = useState(false)
+  const [selectedCustomer, setSelectedCustomer] = useState<any>(null)
   const [editingOrder, setEditingOrder] = useState<any>(null)
   const [profile, setProfile] = useState<any>(null)
   const [selectedOrderIds, setSelectedOrderIds] = useState<string[]>([])
@@ -64,7 +76,7 @@ export default function SalesPage() {
   const [cart, setCart] = useState<{ product: any; quantity: number; customPrice: number }[]>([])
   const [checkoutLoading, setCheckoutLoading] = useState(false)
   const { isLoading: voiceFormLoading, fillForm } = useVoiceFormFill()
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   const router = useRouter()
 
   const resolveCheckoutLocationId = (): string | null | undefined => {
@@ -74,40 +86,41 @@ export default function SalesPage() {
     return undefined
   }
 
-  // Lock employees to their assigned branch
   useEffect(() => {
-    if (!isOwner && activeBranchId) {
+    const urlLocId = new URLSearchParams(window.location.search).get("locationId")
+    let targetLocation = selectedLocationId
+
+    if (urlLocId && urlLocId !== selectedLocationId) {
+      targetLocation = urlLocId
+      setSelectedLocationId(urlLocId)
+    } else if (activeBranchId && selectedLocationId !== activeBranchId && selectedLocationId !== "global") {
+      targetLocation = activeBranchId
       setSelectedLocationId(activeBranchId)
     }
-  }, [isOwner, activeBranchId])
 
-  useEffect(() => {
-    const locId = new URLSearchParams(window.location.search).get("locationId")
-    if (locId) setSelectedLocationId(locId)
-    
-    loadData()
+    loadData(targetLocation)
     fetchLocations()
 
-    const channel = supabase
+    const channel = supabaseRef.current
       .channel("sales-changes")
-      .on("postgres_changes", { event: "*", schema: "public", table: "sales_orders" }, (payload: any) => {
-        loadData()
+      .on("postgres_changes", { event: "*", schema: "public", table: "sales_orders" }, () => {
+        loadData(targetLocation)
       })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabaseRef.current.removeChannel(channel)
     }
-  }, [supabase, selectedLocationId])
+  }, [activeBranchId, selectedLocationId])
 
   const fetchLocations = async () => {
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) return
-    const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+    const { data: profileData } = await supabaseRef.current.from("profiles").select("*").eq("id", user.id).single()
     const ownerId = profileData?.role === "owner" ? user.id : profileData?.owner_id
-    const { data } = await supabase.from("locations").select("*").eq("owner_id", ownerId)
+    const { data } = await supabaseRef.current.from("locations").select("*").eq("owner_id", ownerId)
     const locs = data || []
     setLocations(locs)
     if (locs.length === 1) {
@@ -115,41 +128,58 @@ export default function SalesPage() {
     }
   }
 
-  const loadData = async () => {
+  const loadData = async (branchFilter?: string) => {
     setLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
+    try {
+      const {
+        data: { user },
+      } = await supabaseRef.current.auth.getUser()
+      if (!user) {
+        setLoading(false)
+        return
+      }
+
+      const { data: profileData } = await supabaseRef.current.from("profiles").select("*").eq("id", user.id).single()
+      setProfile(profileData)
+
+      const ownerId = profileData?.role === "owner" ? user.id : profileData?.owner_id
+      if (!ownerId) {
+        setLoading(false)
+        return
+      }
+
+      const filterToUse = branchFilter ?? selectedLocationId
+
+      let ordersQuery = supabaseRef.current
+        .from("sales_orders")
+        .select("*, order_items(*, products(name))")
+        .eq("owner_id", ownerId)
+        .order("order_date", { ascending: false })
+      
+      if (filterToUse && filterToUse !== "global") {
+        ordersQuery = ordersQuery.eq("location_id", filterToUse)
+      }
+
+      let productsQuery = supabaseRef.current.from("products").select("*").eq("owner_id", ownerId).gt("stock_quantity", 0)
+      if (filterToUse && filterToUse !== "global") {
+        // Show products assigned to this branch OR global products (no branch set).
+        // Products assigned to a DIFFERENT branch will NOT appear here.
+        productsQuery = productsQuery.or(`location_id.eq.${filterToUse},location_id.is.null`)
+      }
+
+      const [ordersRes, productsRes] = await Promise.all([
+        ordersQuery,
+        productsQuery
+      ])
+
+      setOrders(ordersRes.data || [])
+      setProducts(productsRes.data || [])
+    } catch (err) {
+      console.error("Sales load error:", err)
+      toast.error("Failed to load sales data")
+    } finally {
       setLoading(false)
-      return
     }
-
-    const { data: profileData } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-    setProfile(profileData)
-
-    const ownerId = profileData?.role === "owner" ? user.id : profileData?.owner_id
-
-    let ordersQuery = supabase
-      .from("sales_orders")
-      .select("*, order_items(*, products(name))")
-      .eq("owner_id", ownerId)
-      .order("order_date", { ascending: false })
-    
-    if (selectedLocationId !== "global") {
-      ordersQuery = ordersQuery.eq("location_id", selectedLocationId)
-    }
-
-    let productsQuery = supabase.from("products").select("*").eq("owner_id", ownerId).gt("stock_quantity", 0)
-
-    const [ordersRes, productsRes] = await Promise.all([
-      ordersQuery,
-      productsQuery
-    ])
-
-    setOrders(ordersRes.data || [])
-    setProducts(productsRes.data || [])
-    setLoading(false)
   }
 
   const addToCart = (product: any) => {
@@ -178,7 +208,10 @@ export default function SalesPage() {
   }
 
   const calculateTotal = () => {
-    return cart.reduce((sum, item) => sum + item.customPrice * item.quantity, 0)
+    return cart.reduce((sum, item) => {
+      const itemPrice = item.customPrice ?? item.product?.price ?? 0
+      return sum + itemPrice * item.quantity
+    }, 0)
   }
 
   const handleVoiceSalesFill = async (transcript: string) => {
@@ -235,7 +268,7 @@ export default function SalesPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) {
       toast.error("Please sign in to complete checkout")
       return
@@ -253,6 +286,24 @@ export default function SalesPage() {
 
     setCheckoutLoading(true)
     try {
+      // Auto-save or update customer contact profile
+      let savedCustId: string | undefined = undefined
+      if (saleFormData.customerName && saleFormData.customerName !== "Walk-in Customer") {
+        try {
+          const savedCust = await upsertCustomer({
+            owner_id: ownerId,
+            name: saleFormData.customerName,
+            phone: saleFormData.customerPhone,
+            email: saleFormData.customerEmail,
+            address: saleFormData.customerAddress,
+            amountToAdd: total + gstAmount,
+          })
+          if (savedCust?.id) savedCustId = savedCust.id
+        } catch (cErr) {
+          console.error("Auto customer save error:", cErr)
+        }
+      }
+
       // 1. Create the main order (Automation: will create invoice)
       const noteParts: string[] = []
       if (saleFormData.customerAddress.trim()) {
@@ -261,6 +312,7 @@ export default function SalesPage() {
 
       const order = await createOrder({
         owner_id: ownerId,
+        customer_id: savedCustId,
         location_id: locationId ?? undefined,
         created_by: user.id,
         customer_name: saleFormData.customerName || "Walk-in Customer",
@@ -281,6 +333,7 @@ export default function SalesPage() {
             quantity: item.quantity,
             unit_price: item.customPrice,
             line_total: item.customPrice * item.quantity,
+            location_id: locationId ?? null,
           })
         }
       }
@@ -341,7 +394,7 @@ export default function SalesPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) return
 
     const ownerId = profile?.role === "owner" ? user.id : profile?.owner_id
@@ -377,6 +430,7 @@ export default function SalesPage() {
           quantity: quantity,
           unit_price: product.price,
           line_total: subtotal,
+          location_id: locationId ?? null,
         })
       }
 
@@ -413,46 +467,101 @@ export default function SalesPage() {
     }, 1500)
   }
 
+  const moveToTrash = async (order: any, reason: string) => {
+    try {
+      const ownerId = profile?.role === "owner" ? profile?.id : profile?.owner_id
+      await supabaseRef.current.from("bill_trash").insert({
+        owner_id: ownerId,
+        category: "sales",
+        order_id: order.id,
+        invoice_number: `INV-${order.id.slice(-6).toUpperCase()}`,
+        customer_name: order.customer_name || "Walk-in Customer",
+        customer_phone: order.customer_phone || "",
+        total_amount: order.total_amount,
+        order_date: order.order_date,
+        reason,
+        original_data: order,
+        trashed_at: new Date().toISOString()
+      })
+    } catch (err) {
+      console.warn("Could not save bill to trash:", err)
+    }
+  }
+
   const handleEditOrder = async () => {
     if (!editingOrder) return
 
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabaseRef.current.auth.getUser()
       if (!user) return
 
       const ownerId = profile?.role === "owner" ? user.id : profile?.owner_id
 
       // 1. Fetch original items to reconcile stock
-      const { data: originalItems } = await supabase
+      const { data: originalItems } = await supabaseRef.current
         .from("order_items")
         .select("*")
         .eq("order_id", editingOrder.id)
 
-      // 2. Update each item and reconcile stock
-      if (editingOrder.order_items) {
+      // Check if status is transitioning to cancelled or refunded from an active status, or vice-versa
+      const wasAlreadyCancelledOrRefunded = editingOrder.originalStatus === "cancelled" || editingOrder.originalStatus === "refunded"
+      const isBecomingCancelledOrRefunded = (editingOrder.status === "cancelled" || editingOrder.status === "refunded") && !wasAlreadyCancelledOrRefunded
+      const isReactivatingFromCancelled = wasAlreadyCancelledOrRefunded && (editingOrder.status === "completed" || editingOrder.status === "pending")
+      
+      if (isBecomingCancelledOrRefunded) {
+        // Restore stock for all items ONCE on transition to cancelled/refunded
+        if (originalItems && originalItems.length > 0) {
+          for (const item of originalItems) {
+            try {
+              await supabaseRef.current.rpc("reconcile_order_item_stock", {
+                p_product_id: item.product_id,
+                p_delta: item.quantity,
+              })
+            } catch (stockErr) {
+              console.warn("Stock restoration failed for refunded/cancelled item:", stockErr)
+            }
+          }
+        }
+        // Move to trash
+        await moveToTrash(editingOrder, `Order ${editingOrder.status}`)
+      } else if (isReactivatingFromCancelled) {
+        // Transition from cancelled/refunded -> completed/pending: re-deduct product stock (-qty)
+        if (originalItems && originalItems.length > 0) {
+          for (const item of originalItems) {
+            try {
+              await supabaseRef.current.rpc("reconcile_order_item_stock", {
+                p_product_id: item.product_id,
+                p_delta: -item.quantity,
+              })
+            } catch (stockErr) {
+              console.warn("Stock re-deduction failed on reactivating order:", stockErr)
+            }
+          }
+        }
+      }
+
+      // 2. Update each item and reconcile stock via SECURITY DEFINER RPC
+      if (editingOrder.order_items && !isBecomingCancelledOrRefunded && !wasAlreadyCancelledOrRefunded) {
         for (const item of editingOrder.order_items) {
           const original = originalItems?.find((oi: any) => oi.id === item.id)
           
           if (original) {
             // Reconcile stock: Add back original qty, subtract new qty
-            const qtyDiff = original.quantity - item.quantity;
+            const qtyDiff = original.quantity - item.quantity
             if (qtyDiff !== 0) {
-              const { data: currentProduct } = await supabase
-                .from('products')
-                .select('stock_quantity')
-                .eq('id', item.product_id)
-                .single()
-              if (currentProduct) {
-                await supabase
-                  .from('products')
-                  .update({ stock_quantity: (currentProduct.stock_quantity || 0) + qtyDiff })
-                  .eq('id', item.product_id)
+              try {
+                await supabaseRef.current.rpc("reconcile_order_item_stock", {
+                  p_product_id: item.product_id,
+                  p_delta: qtyDiff,
+                })
+              } catch (stockErr) {
+                console.warn("Stock reconciliation warning:", stockErr)
               }
             }
             
-            await supabase
+            await supabaseRef.current
               .from("order_items")
               .update({
                 product_id: item.product_id,
@@ -465,10 +574,27 @@ export default function SalesPage() {
         }
       }
 
-      // 3. Update the main order
-      const { error } = await supabase
+      // 3. Upsert customer and update main order
+      let updatedCustomerId = editingOrder.customer_id
+      if (editingOrder.customer_name && editingOrder.customer_name !== "Walk-in Customer") {
+        try {
+          const cust = await upsertCustomer({
+            owner_id: ownerId,
+            name: editingOrder.customer_name,
+            phone: editingOrder.customer_phone,
+            email: editingOrder.customer_email,
+            address: editingOrder.customer_address,
+          })
+          if (cust?.id) updatedCustomerId = cust.id
+        } catch (cErr) {
+          console.error("Customer update error on edit order:", cErr)
+        }
+      }
+
+      const { error } = await supabaseRef.current
         .from("sales_orders")
         .update({
+          customer_id: updatedCustomerId,
           customer_name: editingOrder.customer_name,
           customer_phone: editingOrder.customer_phone,
           customer_email: editingOrder.customer_email,
@@ -484,16 +610,16 @@ export default function SalesPage() {
         actionType: "sale_updated",
         entityType: "order",
         entityId: editingOrder.id,
-        message: `Order #${editingOrder.id.slice(-8)} updated by ${profile?.email || "team member"}`,
+        message: `Order #${editingOrder.id.slice(-8)} updated to ${editingOrder.status} by ${profile?.email || "team member"}`,
         ownerId,
         userId: user.id,
       })
 
       setEditingOrder(null)
       loadData()
-      alert("Order updated successfully!")
+      toast.success(isNowCancelledOrRefunded ? `Order status updated to ${editingOrder.status}, stock restored & moved to Trash.` : "Order updated successfully!")
     } catch (error: any) {
-      alert("Error updating order: " + error.message)
+      toast.error("Error updating order: " + error.message)
     }
   }
 
@@ -501,13 +627,20 @@ export default function SalesPage() {
     if (!confirm(`Are you sure you want to delete ${selectedOrderIds.length} orders?`)) return
     
     try {
-      const { error } = await supabase.from("sales_orders").delete().in("id", selectedOrderIds)
+      for (const id of selectedOrderIds) {
+        const targetOrder = orders.find((o) => o.id === id)
+        if (targetOrder) {
+          await moveToTrash(targetOrder, "Order deleted")
+        }
+      }
+
+      const { error } = await supabaseRef.current.from("sales_orders").delete().in("id", selectedOrderIds)
       if (error) throw error
       setSelectedOrderIds([])
-      alert("Selected orders deleted successfully!")
+      toast.success("Selected orders deleted, moved to Trash, and stock restored.")
       loadData()
     } catch (error: any) {
-      alert("Error deleting orders: " + error.message)
+      toast.error("Error deleting orders: " + error.message)
     }
   }
 
@@ -531,13 +664,18 @@ export default function SalesPage() {
     if (!confirm("Are you sure you want to delete this order?")) return
 
     try {
-      const { error } = await supabase.from("sales_orders").delete().eq("id", orderId)
+      const targetOrder = orders.find((o) => o.id === orderId)
+      if (targetOrder) {
+        await moveToTrash(targetOrder, "Order deleted")
+      }
+
+      const { error } = await supabaseRef.current.from("sales_orders").delete().eq("id", orderId)
 
       if (error) throw error
-
-      // Real-time subscription will automatically reload data
+      toast.success("Order deleted, moved to Trash, and stock restored.")
+      loadData()
     } catch (error: any) {
-      alert("Error deleting order: " + error.message)
+      toast.error("Error deleting order: " + error.message)
     }
   }
   const orderSharePayload = (order: any) => {
@@ -599,7 +737,7 @@ export default function SalesPage() {
     )
   }
 
-  if (!profile?.can_manage_sales) {
+  if (!canViewSales) {
     return (
       <div className="p-4 sm:p-8">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 sm:p-16 text-center shadow-2xl">
@@ -675,6 +813,7 @@ export default function SalesPage() {
             onClick={() => setShowPOS(!showPOS)} 
             variant={showPOS ? "outline" : "default"}
             className={showPOS ? "border-slate-800 text-slate-300" : "bg-blue-600 hover:bg-blue-700 shadow-xl shadow-blue-900/20"}
+            disabled={!canCreateSales && !showPOS}
           >
             {showPOS ? (
               <>
@@ -858,16 +997,37 @@ export default function SalesPage() {
                     </CollapsibleTrigger>
                     <CollapsibleContent className="pt-3 space-y-3">
                       <div>
-                        <Label className="text-xs text-slate-500 mb-1 block">Customer name</Label>
-                        <Input
-                          placeholder="Walk-in or customer name"
-                          className="bg-slate-950 border-slate-800 h-10 text-sm"
+                        <Label className="text-xs text-slate-500 mb-1 block">Customer name (Auto-search saved contacts)</Label>
+                        <CustomerSearch
+                          ownerId={profile?.role === "owner" ? profile?.id : profile?.owner_id}
                           value={saleFormData.customerName}
-                          onChange={(e) =>
-                            setSaleFormData({ ...saleFormData, customerName: e.target.value })
-                          }
+                          onChange={(val) => {
+                            setSaleFormData({ ...saleFormData, customerName: val })
+                            if (!val) setSelectedCustomer(null)
+                          }}
+                          onSelect={(c) => {
+                            setSelectedCustomer(c)
+                            setSaleFormData({
+                              ...saleFormData,
+                              customerName: c.name,
+                              customerPhone: c.phone || "",
+                              customerEmail: c.email || "",
+                              customerAddress: c.address || "",
+                            })
+                          }}
                         />
                       </div>
+                      {selectedCustomer && selectedCustomer.outstanding_balance > 0 && (
+                        <div className="bg-red-950/40 border border-red-900/50 rounded-lg p-2.5 text-xs text-red-300 flex items-start gap-2">
+                          <AlertCircle className="w-4 h-4 text-red-400 shrink-0 mt-0.5" />
+                          <div>
+                            <span className="font-semibold text-red-200">Customer Ledger Alert:</span>
+                            <p className="mt-0.5">
+                              Has unpaid balance: <strong className="text-red-400 font-bold">₹{Number(selectedCustomer.outstanding_balance).toLocaleString('en-IN')}</strong>.
+                            </p>
+                          </div>
+                        </div>
+                      )}
                       <div>
                         <Label className="text-xs text-slate-500 mb-1 block flex items-center gap-1">
                           <MessageCircle className="w-3 h-3 text-green-500" />
@@ -1021,6 +1181,39 @@ export default function SalesPage() {
             </div>
           )}
 
+          {/* Payment Summary Banner */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+            <div className="bg-slate-900 border border-slate-800 p-5 rounded-2xl">
+              <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Sales</p>
+              <p className="text-2xl font-black text-white mt-1">
+                {formatPrice(orders.reduce((sum, o) => sum + (Number(o.total_amount) || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-emerald-900/40 p-5 rounded-2xl">
+              <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">Collected</p>
+              <p className="text-2xl font-black text-emerald-400 mt-1">
+                {formatPrice(orders.reduce((sum, o) => sum + (Number(o.amount_paid) || 0), 0))}
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-amber-900/40 p-5 rounded-2xl">
+              <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider">Pending</p>
+              <p className="text-2xl font-black text-amber-500 mt-1">
+                {formatPrice(orders.reduce((sum, o) => sum + (Number(o.balance_due) ?? Math.max(0, Number(o.total_amount) - (Number(o.amount_paid) || 0))), 0))}
+              </p>
+            </div>
+            <div className="bg-slate-900 border border-rose-900/40 p-5 rounded-2xl">
+              <p className="text-xs text-rose-400 font-semibold uppercase tracking-wider">Overdue</p>
+              <p className="text-2xl font-black text-rose-500 mt-1">
+                {orders.filter((o) => {
+                  const isPaid = o.payment_status === "paid" || (o.balance_due <= 0 && o.amount_paid > 0)
+                  const orderDate = new Date(o.order_date).getTime()
+                  const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+                  return !isPaid && orderDate < thirtyDaysAgo
+                }).length} orders
+              </p>
+            </div>
+          </div>
+
           <Card className="bg-slate-900 border-slate-800 rounded-3xl overflow-hidden shadow-2xl">
             <div className="p-4 md:p-6 border-b border-slate-800 bg-slate-900/50 flex flex-col md:flex-row md:items-center justify-between gap-4">
               <h2 className="text-lg font-bold text-white">Order History</h2>
@@ -1057,76 +1250,160 @@ export default function SalesPage() {
                         </th>
                         <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Date</th>
                         <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Customer</th>
+                        <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Items</th>
                         <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Amount</th>
                         <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Status</th>
+                        <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Payment</th>
                         <th className="p-6 text-xs font-bold text-slate-500 uppercase tracking-widest">Actions</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-slate-800">
-                      {orders.map((order) => (
-                        <tr key={order.id} className="hover:bg-slate-800/30 transition-colors group">
-                          <td className="p-6">
-                            <input type="checkbox" checked={selectedOrderIds.includes(order.id)} onChange={() => toggleSelectOrder(order.id)} className="w-5 h-5 rounded-lg border-slate-800 bg-slate-950 accent-blue-600" />
-                          </td>
-                          <td className="p-6">
-                            <p className="text-white font-bold text-sm">{new Date(order.order_date).toLocaleDateString("en-IN")}</p>
-                            <p className="text-[10px] text-slate-500 mt-1">{new Date(order.order_date).toLocaleTimeString("en-IN", {timeStyle: 'short'})}</p>
-                          </td>
-                          <td className="p-6">
-                            <div className="flex items-center gap-3">
-                              <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-blue-400">{order.customer_name?.[0] || "W"}</div>
-                              <div>
-                                <p className="text-sm font-bold text-white">{order.customer_name || "Walk-in Customer"}</p>
-                                <p className="text-[10px] text-slate-500">{order.customer_phone || "No contact"}</p>
+                      {orders.map((order) => {
+                        const amountPaid = Number(order.amount_paid) || 0
+                        const totalAmt = Number(order.total_amount) || 0
+                        const balDue = order.balance_due !== undefined && order.balance_due !== null ? Number(order.balance_due) : Math.max(0, totalAmt - amountPaid)
+                        const isFullyPaid = order.payment_status === 'paid' || (balDue <= 0 && amountPaid > 0)
+                        const isPartial = order.payment_status === 'partial' || (amountPaid > 0 && balDue > 0)
+
+                        return (
+                          <tr key={order.id} className="hover:bg-slate-800/30 transition-colors group">
+                            <td className="p-6">
+                              <input type="checkbox" checked={selectedOrderIds.includes(order.id)} onChange={() => toggleSelectOrder(order.id)} className="w-5 h-5 rounded-lg border-slate-800 bg-slate-950 accent-blue-600" />
+                            </td>
+                            <td className="p-6">
+                              <p className="text-white font-bold text-sm">{new Date(order.order_date).toLocaleDateString("en-IN")}</p>
+                              <p className="text-[10px] text-slate-500 mt-1">{new Date(order.order_date).toLocaleTimeString("en-IN", {timeStyle: 'short'})}</p>
+                            </td>
+                            <td className="p-6">
+                              <div className="flex items-center gap-3">
+                                <div className="w-8 h-8 rounded-full bg-slate-800 flex items-center justify-center text-xs font-bold text-blue-400">{order.customer_name?.[0] || "W"}</div>
+                                <div>
+                                  <p className="text-sm font-bold text-white">{order.customer_name || "Walk-in Customer"}</p>
+                                  <p className="text-[10px] text-slate-500">{order.customer_phone || "No contact"}</p>
+                                </div>
                               </div>
-                            </div>
-                          </td>
-                          <td className="p-6">
-                            <p className="text-white font-black text-sm">{formatPrice(order.total_amount)}</p>
-                            <p className="text-[10px] text-emerald-500/80 font-bold">GST: {formatPrice(order.gst_amount)}</p>
-                          </td>
-                          <td className="p-6">
-                            <span className="inline-flex px-3 py-1 text-[10px] font-black uppercase tracking-widest rounded-full bg-emerald-500/10 text-emerald-500 border border-emerald-500/20">{order.status}</span>
-                          </td>
-                          <td className="p-6">
-                            <div className="flex items-center gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
-                              <InvoiceShareButton payload={orderSharePayload(order)} size="icon" className="flex items-center justify-center text-green-500 hover:text-green-400 p-0 w-9 h-9" />
-                              <Button variant="ghost" size="icon" onClick={() => shareViaEmail(order)} className="w-9 h-9 text-blue-400 hover:bg-blue-400/10 rounded-xl"><Mail className="w-4 h-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => setEditingOrder(order)} className="w-9 h-9 text-slate-400 hover:bg-slate-800 rounded-xl"><Edit className="w-4 h-4" /></Button>
-                              <Button variant="ghost" size="icon" onClick={() => handleDeleteOrder(order.id)} className="w-9 h-9 text-red-400 hover:bg-red-500/10 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
+                            </td>
+                            <td className="p-6 max-w-[180px]">
+                              {(order.order_items || []).length === 0 ? (
+                                <p className="text-xs text-slate-600 italic">—</p>
+                              ) : (
+                                <div className="space-y-1">
+                                  {(order.order_items || []).slice(0, 3).map((item: any, i: number) => (
+                                    <p key={i} className="text-xs text-slate-300 truncate">
+                                      <span className="font-bold text-white">{item.quantity}×</span>{" "}
+                                      {item.product_name || item.products?.name || "Deleted item"}
+                                    </p>
+                                  ))}
+                                  {(order.order_items || []).length > 3 && (
+                                    <p className="text-[10px] text-slate-500">+{(order.order_items || []).length - 3} more</p>
+                                  )}
+                                </div>
+                              )}
+                            </td>
+                            <td className="p-6">
+                              <p className="text-white font-black text-sm">{formatPrice(order.total_amount)}</p>
+                              <p className="text-[10px] text-slate-400 mt-0.5">Paid: {formatPrice(amountPaid)} | Due: {formatPrice(balDue)}</p>
+                            </td>
+                            <td className="p-6">
+                              {order.status === "completed" || !order.status ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold">Completed</Badge>
+                              ) : order.status === "cancelled" ? (
+                                <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold">Cancelled</Badge>
+                              ) : order.status === "refunded" ? (
+                                <Badge className="bg-purple-500/10 text-purple-400 border-purple-500/20 font-bold">Refunded</Badge>
+                              ) : (
+                                <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold">Pending</Badge>
+                              )}
+                            </td>
+                            <td className="p-6">
+                              {isFullyPaid ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold">Paid ✓</Badge>
+                              ) : isPartial ? (
+                                <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold">Partial {formatPrice(amountPaid)} paid</Badge>
+                              ) : (
+                                <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold">Unpaid</Badge>
+                              )}
+                            </td>
+                            <td className="p-6">
+                              <div className="flex items-center gap-2">
+                                {!isFullyPaid && order.status !== 'cancelled' && order.status !== 'refunded' && (
+                                  <Button
+                                    size="sm"
+                                    onClick={() => setPaymentSheetState({ open: true, order })}
+                                    className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 h-8 text-xs font-bold px-2.5 transition-all"
+                                  >
+                                    💰 Record Payment
+                                  </Button>
+                                )}
+                                <div className="flex items-center gap-1 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
+                                  <InvoiceShareButton payload={orderSharePayload(order)} size="icon" className="flex items-center justify-center text-green-500 hover:text-green-400 p-0 w-9 h-9" />
+                                  <Button variant="ghost" size="icon" onClick={() => shareViaEmail(order)} className="w-9 h-9 text-blue-400 hover:bg-blue-400/10 rounded-xl"><Mail className="w-4 h-4" /></Button>
+                                  <Button variant="ghost" size="icon" onClick={() => setEditingOrder({ ...order, originalStatus: order.status })} className="w-9 h-9 text-slate-400 hover:bg-slate-800 rounded-xl"><Edit className="w-4 h-4" /></Button>
+                                  <Button variant="ghost" size="icon" onClick={() => handleDeleteOrder(order.id)} className="w-9 h-9 text-red-400 hover:bg-red-500/10 rounded-xl"><Trash2 className="w-4 h-4" /></Button>
+                                </div>
+                              </div>
+                            </td>
+                          </tr>
+                        )
+                      })}
                     </tbody>
                   </table>
                 </div>
 
                 {/* Mobile Order Cards */}
                 <div className="md:hidden space-y-3 p-3">
-                  {orders.map((order) => (
-                    <div key={order.id} className={`bg-slate-800/40 border rounded-xl p-4 transition-colors ${selectedOrderIds.includes(order.id) ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-800'}`}>
-                      <div className="flex items-start justify-between gap-3">
-                        <div className="flex items-start gap-3 flex-1 min-w-0">
-                          <input type="checkbox" checked={selectedOrderIds.includes(order.id)} onChange={() => toggleSelectOrder(order.id)} className="w-5 h-5 mt-0.5 rounded border-slate-700 bg-slate-800 accent-blue-500 shrink-0" />
-                          <div className="min-w-0">
-                            <p className="text-white font-semibold truncate">{order.customer_name || "Walk-in Customer"}</p>
-                            <p className="text-xs text-slate-500 mt-0.5">{new Date(order.order_date).toLocaleDateString("en-IN")} · {new Date(order.order_date).toLocaleTimeString("en-IN", {timeStyle: 'short'})}</p>
+                  {orders.map((order) => {
+                    const amountPaid = Number(order.amount_paid) || 0
+                    const totalAmt = Number(order.total_amount) || 0
+                    const balDue = order.balance_due !== undefined && order.balance_due !== null ? Number(order.balance_due) : Math.max(0, totalAmt - amountPaid)
+                    const isFullyPaid = order.payment_status === 'paid' || (balDue <= 0 && amountPaid > 0)
+                    const isPartial = order.payment_status === 'partial' || (amountPaid > 0 && balDue > 0)
+
+                    return (
+                      <div key={order.id} className={`bg-slate-800/40 border rounded-xl p-4 transition-colors ${selectedOrderIds.includes(order.id) ? 'border-blue-500/50 bg-blue-900/10' : 'border-slate-800'}`}>
+                        <div className="flex items-start justify-between gap-3">
+                          <div className="flex items-start gap-3 flex-1 min-w-0">
+                            <input type="checkbox" checked={selectedOrderIds.includes(order.id)} onChange={() => toggleSelectOrder(order.id)} className="w-5 h-5 mt-0.5 rounded border-slate-700 bg-slate-800 accent-blue-500 shrink-0" />
+                            <div className="min-w-0">
+                              <p className="text-white font-semibold truncate">{order.customer_name || "Walk-in Customer"}</p>
+                              <p className="text-xs text-slate-500 mt-0.5">{new Date(order.order_date).toLocaleDateString("en-IN")} · {new Date(order.order_date).toLocaleTimeString("en-IN", {timeStyle: 'short'})}</p>
+                            </div>
+                          </div>
+                          <div className="text-right shrink-0">
+                            <p className="text-white font-bold">{formatPrice(order.total_amount)}</p>
+                            <div className="mt-1">
+                              {isFullyPaid ? (
+                                <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px] font-bold">Paid ✓</Badge>
+                              ) : isPartial ? (
+                                <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[9px] font-bold">Partial {formatPrice(amountPaid)} paid</Badge>
+                              ) : (
+                                <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[9px] font-bold">Unpaid</Badge>
+                              )}
+                            </div>
                           </div>
                         </div>
-                        <div className="text-right shrink-0">
-                          <p className="text-white font-bold">{formatPrice(order.total_amount)}</p>
-                          <span className="inline-flex px-2 py-0.5 text-[9px] font-bold uppercase rounded-full bg-emerald-500/10 text-emerald-500 mt-0.5">{order.status}</span>
+                        <div className="flex items-center justify-between gap-2 mt-3 pt-3 border-t border-slate-700/50">
+                          <div>
+                            {!isFullyPaid && order.status !== 'cancelled' && order.status !== 'refunded' && (
+                              <Button
+                                size="sm"
+                                onClick={() => setPaymentSheetState({ open: true, order })}
+                                className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 h-8 text-xs font-bold px-2.5"
+                              >
+                                💰 Record Payment
+                              </Button>
+                            )}
+                          </div>
+                          <div className="flex items-center gap-1">
+                            <InvoiceShareButton payload={orderSharePayload(order)} size="icon" className="flex items-center justify-center text-green-500 p-0 w-9 h-9" />
+                            <Button variant="ghost" size="icon" onClick={() => shareViaEmail(order)} className="w-9 h-9 text-blue-400"><Mail className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => setEditingOrder({ ...order, originalStatus: order.status })} className="w-9 h-9 text-slate-400"><Edit className="w-4 h-4" /></Button>
+                            <Button variant="ghost" size="icon" onClick={() => handleDeleteOrder(order.id)} className="w-9 h-9 text-red-400"><Trash2 className="w-4 h-4" /></Button>
+                          </div>
                         </div>
                       </div>
-                      <div className="flex items-center justify-end gap-1 mt-3 pt-3 border-t border-slate-700/50">
-                        <InvoiceShareButton payload={orderSharePayload(order)} size="icon" className="flex items-center justify-center text-green-500 p-0 w-9 h-9" />
-                        <Button variant="ghost" size="icon" onClick={() => shareViaEmail(order)} className="w-9 h-9 text-blue-400"><Mail className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => setEditingOrder(order)} className="w-9 h-9 text-slate-400"><Edit className="w-4 h-4" /></Button>
-                        <Button variant="ghost" size="icon" onClick={() => handleDeleteOrder(order.id)} className="w-9 h-9 text-red-400"><Trash2 className="w-4 h-4" /></Button>
-                      </div>
-                    </div>
-                  ))}
+                    )
+                  })}
                 </div>
               </>
             )}
@@ -1146,111 +1423,116 @@ export default function SalesPage() {
 
           {editingOrder && (
             <div className="px-4 pb-4 space-y-6 overflow-y-auto">
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div className="col-span-1 md:col-span-2">
-                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Customer Details</label>
-                  <Input
-                    value={editingOrder.customer_name}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, customer_name: e.target.value })}
-                    className="bg-slate-950 border-slate-800 h-12 rounded-xl"
-                    placeholder="Customer Name"
-                  />
-                </div>
-                <div>
-                  <Input
-                    value={editingOrder.customer_phone || ""}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, customer_phone: e.target.value })}
-                    className="bg-slate-950 border-slate-800 h-12 rounded-xl"
-                    placeholder="WhatsApp Number"
-                  />
-                </div>
-                <div>
-                  <Input
-                    value={editingOrder.customer_email || ""}
-                    onChange={(e) => setEditingOrder({ ...editingOrder, customer_email: e.target.value })}
-                    className="bg-slate-950 border-slate-800 h-12 rounded-xl"
-                    placeholder="Email Address"
-                  />
+              {/* Customer Details */}
+              <div>
+                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Customer Details</label>
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <div className="col-span-1 md:col-span-2">
+                    <Input value={editingOrder.customer_name || ""} onChange={(e) => setEditingOrder({ ...editingOrder, customer_name: e.target.value })} className="bg-slate-950 border-slate-800 h-11 rounded-xl" placeholder="Customer Name" />
+                  </div>
+                  <Input value={editingOrder.customer_phone || ""} onChange={(e) => setEditingOrder({ ...editingOrder, customer_phone: e.target.value })} className="bg-slate-950 border-slate-800 h-11 rounded-xl" placeholder="Phone / WhatsApp" />
+                  <Input value={editingOrder.customer_email || ""} onChange={(e) => setEditingOrder({ ...editingOrder, customer_email: e.target.value })} className="bg-slate-950 border-slate-800 h-11 rounded-xl" placeholder="Email Address" />
+                  <div className="col-span-1 md:col-span-2">
+                    <Input value={editingOrder.notes || ""} onChange={(e) => setEditingOrder({ ...editingOrder, notes: e.target.value })} className="bg-slate-950 border-slate-800 h-11 rounded-xl" placeholder="Delivery address / Notes" />
+                  </div>
                 </div>
               </div>
 
+              {/* Order Items */}
               <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-3 block">Order Items</label>
+                <div className="flex items-center justify-between mb-3">
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest">Order Items</label>
+                  <button
+                    onClick={() => {
+                      const firstProd = products[0]
+                      if (!firstProd) return
+                      const newItem = { id: null, product_id: firstProd.id, product_name: firstProd.name, products: { name: firstProd.name }, quantity: 1, unit_price: firstProd.price, line_total: firstProd.price, _new: true }
+                      const newItems = [...(editingOrder.order_items || []), newItem]
+                      const sub = newItems.reduce((s: number, i: any) => s + i.line_total, 0)
+                      const gr = editingOrder._gstRate ?? 0.18
+                      setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: sub + sub * gr, gst_amount: sub * gr })
+                    }}
+                    className="text-xs font-bold text-blue-400 hover:text-blue-300 bg-blue-500/10 hover:bg-blue-500/20 px-3 py-1.5 rounded-lg transition-all"
+                  >+ Add Item</button>
+                </div>
                 <div className="space-y-3">
-                  {editingOrder.order_items?.map((item: any, idx: number) => (
-                    <div key={item.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl flex flex-col gap-4">
-                      <div className="flex justify-between items-center">
+                  {(editingOrder.order_items || []).map((item: any, idx: number) => (
+                    <div key={item.id || idx} className="bg-slate-950 border border-slate-800 p-4 rounded-2xl space-y-3">
+                      <div className="flex items-center gap-2">
                         <select
-                          value={item.product_id}
+                          value={item.product_id || ""}
                           onChange={(e) => {
-                            const newProdId = e.target.value
-                            const newProd = products.find(p => p.id === newProdId)
+                            const newProd = products.find(p => p.id === e.target.value)
                             if (!newProd) return
                             const newItems = [...editingOrder.order_items]
-                            newItems[idx] = { ...item, product_id: newProdId, unit_price: newProd.price, line_total: newProd.price * item.quantity, products: { name: newProd.name } }
-                            const subtotal = newItems.reduce((sum: number, i: any) => sum + i.line_total, 0)
-                            const gst = subtotal * 0.18
-                            setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: subtotal + gst, gst_amount: gst })
+                            newItems[idx] = { ...item, product_id: newProd.id, product_name: newProd.name, unit_price: newProd.price, line_total: newProd.price * item.quantity, products: { name: newProd.name } }
+                            const sub = newItems.reduce((s: number, i: any) => s + i.line_total, 0)
+                            const gr = editingOrder._gstRate ?? 0.18
+                            setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: sub + sub * gr, gst_amount: sub * gr })
                           }}
-                          className="bg-transparent text-sm font-bold text-white focus:outline-none flex-1"
+                          className="bg-slate-900 border border-slate-700 text-sm font-bold text-white rounded-lg px-3 h-9 flex-1 focus:outline-none focus:ring-1 focus:ring-blue-500"
                         >
-                          {products.map(p => (
-                            <option key={p.id} value={p.id} className="bg-slate-900">{p.name}</option>
-                          ))}
+                          {!item.product_id && <option value="" className="bg-slate-900 text-slate-400">{item.product_name || "Deleted product"}</option>}
+                          {products.map(p => <option key={p.id} value={p.id} className="bg-slate-900">{p.name}</option>)}
                         </select>
-                        <p className="text-xs font-bold text-blue-400 shrink-0 ml-2">{formatPrice(item.line_total)}</p>
+                        <button
+                          onClick={() => {
+                            const newItems = editingOrder.order_items.filter((_: any, i: number) => i !== idx)
+                            const sub = newItems.reduce((s: number, i: any) => s + i.line_total, 0)
+                            const gr = editingOrder._gstRate ?? 0.18
+                            setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: sub + sub * gr, gst_amount: sub * gr })
+                          }}
+                          className="w-8 h-8 flex items-center justify-center text-red-400 hover:bg-red-500/10 rounded-lg shrink-0"
+                        >✕</button>
                       </div>
-                      <div className="flex items-center gap-4">
-                        <div className="flex items-center gap-2 bg-slate-900 rounded-lg p-1">
-                          <button 
-                            onClick={() => {
-                              const newQty = Math.max(1, item.quantity - 1)
-                              const newItems = [...editingOrder.order_items]
-                              newItems[idx] = { ...item, quantity: newQty, line_total: item.unit_price * newQty }
-                              const subtotal = newItems.reduce((sum: number, i: any) => sum + i.line_total, 0)
-                              const gst = subtotal * 0.18
-                              setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: subtotal + gst, gst_amount: gst })
-                            }}
-                            className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400"
-                          >-</button>
-                          <span className="text-sm font-bold w-6 text-center">{item.quantity}</span>
-                          <button 
-                            onClick={() => {
-                              const newQty = item.quantity + 1
-                              const newItems = [...editingOrder.order_items]
-                              newItems[idx] = { ...item, quantity: newQty, line_total: item.unit_price * newQty }
-                              const subtotal = newItems.reduce((sum: number, i: any) => sum + i.line_total, 0)
-                              const gst = subtotal * 0.18
-                              setEditingOrder({ ...editingOrder, order_items: newItems, total_amount: subtotal + gst, gst_amount: gst })
-                            }}
-                            className="w-8 h-8 flex items-center justify-center hover:bg-slate-800 rounded-lg text-slate-400"
-                          >+</button>
+                      <div className="flex items-center gap-3">
+                        <div className="flex items-center bg-slate-900 rounded-lg px-1 py-1 shrink-0">
+                          <button onClick={() => { const q = Math.max(1, item.quantity - 1); const ni = [...editingOrder.order_items]; ni[idx] = { ...item, quantity: q, line_total: item.unit_price * q }; const sub = ni.reduce((s: number, i: any) => s + i.line_total, 0); const gr = editingOrder._gstRate ?? 0.18; setEditingOrder({ ...editingOrder, order_items: ni, total_amount: sub + sub * gr, gst_amount: sub * gr }) }} className="w-8 h-7 flex items-center justify-center hover:bg-slate-800 rounded-md text-slate-400 font-bold">−</button>
+                          <span className="text-sm font-bold w-8 text-center text-white">{item.quantity}</span>
+                          <button onClick={() => { const q = item.quantity + 1; const ni = [...editingOrder.order_items]; ni[idx] = { ...item, quantity: q, line_total: item.unit_price * q }; const sub = ni.reduce((s: number, i: any) => s + i.line_total, 0); const gr = editingOrder._gstRate ?? 0.18; setEditingOrder({ ...editingOrder, order_items: ni, total_amount: sub + sub * gr, gst_amount: sub * gr }) }} className="w-8 h-7 flex items-center justify-center hover:bg-slate-800 rounded-md text-slate-400 font-bold">+</button>
                         </div>
-                        <p className="text-[10px] text-slate-500">Unit: {formatPrice(item.unit_price)}</p>
+                        <div className="flex items-center gap-1.5 flex-1 bg-slate-900 border border-slate-700 rounded-lg px-2 h-9">
+                          <span className="text-xs text-slate-500">₹</span>
+                          <input type="number" min="0" step="0.01" value={item.unit_price}
+                            onChange={(e) => { const p2 = parseFloat(e.target.value) || 0; const ni = [...editingOrder.order_items]; ni[idx] = { ...item, unit_price: p2, line_total: p2 * item.quantity }; const sub = ni.reduce((s: number, i: any) => s + i.line_total, 0); const gr = editingOrder._gstRate ?? 0.18; setEditingOrder({ ...editingOrder, order_items: ni, total_amount: sub + sub * gr, gst_amount: sub * gr }) }}
+                            className="bg-transparent text-sm text-white w-full focus:outline-none" placeholder="Unit price" />
+                        </div>
+                        <p className="text-sm font-bold text-blue-400 shrink-0 w-20 text-right">{formatPrice(item.line_total)}</p>
                       </div>
                     </div>
                   ))}
                 </div>
               </div>
 
-              <div>
-                <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Order Status</label>
-                <select
-                  value={editingOrder.status}
-                  onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value })}
-                  className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 h-12"
-                >
-                  <option value="pending">Pending</option>
-                  <option value="completed">Completed</option>
-                  <option value="cancelled">Cancelled</option>
-                  <option value="refunded">Refunded</option>
-                </select>
+              {/* GST + Status */}
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">GST Rate</label>
+                  <select value={String(editingOrder._gstRate ?? 0.18)} onChange={(e) => { const gr = parseFloat(e.target.value); const sub = (editingOrder.order_items || []).reduce((s: number, i: any) => s + i.line_total, 0); setEditingOrder({ ...editingOrder, _gstRate: gr, gst_amount: sub * gr, total_amount: sub + sub * gr }) }} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 h-11 text-sm">
+                    <option value="0">No GST (0%)</option>
+                    <option value="0.05">5% GST</option>
+                    <option value="0.12">12% GST</option>
+                    <option value="0.18">18% GST</option>
+                    <option value="0.28">28% GST</option>
+                  </select>
+                </div>
+                <div>
+                  <label className="text-[10px] font-black text-slate-500 uppercase tracking-widest mb-2 block">Status</label>
+                  <select value={editingOrder.status} onChange={(e) => setEditingOrder({ ...editingOrder, status: e.target.value })} className="w-full bg-slate-950 border border-slate-800 text-white rounded-xl px-4 h-11 text-sm">
+                    <option value="pending">Pending</option>
+                    <option value="completed">Completed</option>
+                    <option value="cancelled">Cancelled</option>
+                    <option value="refunded">Refunded</option>
+                  </select>
+                </div>
               </div>
 
+              {/* Total + Save */}
               <div className="pt-4 border-t border-slate-800 flex flex-col sm:flex-row items-center justify-between gap-4">
-                <div>
-                  <p className="text-xs text-slate-500 font-bold uppercase">New Total</p>
-                  <p className="text-2xl font-black text-white">{formatPrice(editingOrder.total_amount)}</p>
+                <div className="space-y-0.5">
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">Subtotal: {formatPrice((editingOrder.order_items || []).reduce((s: number, i: any) => s + i.line_total, 0))}</p>
+                  <p className="text-[10px] text-slate-500 uppercase font-bold">GST: {formatPrice(editingOrder.gst_amount || 0)}</p>
+                  <p className="text-2xl font-black text-white">Total: {formatPrice(editingOrder.total_amount)}</p>
                 </div>
                 <Button onClick={handleEditOrder} className="bg-blue-600 hover:bg-blue-700 h-12 px-8 rounded-2xl font-bold shadow-xl shadow-blue-900/20 w-full sm:w-auto">
                   Update Order
@@ -1260,6 +1542,22 @@ export default function SalesPage() {
           )}
         </DrawerContent>
       </Drawer>
+      {/* Payment Sheet */}
+      {paymentSheetState.order && (
+        <PaymentSheet
+          open={paymentSheetState.open}
+          onOpenChange={(open) => setPaymentSheetState((prev) => ({ ...prev, open }))}
+          referenceType="sale"
+          referenceId={paymentSheetState.order.id}
+          title={`Order #${paymentSheetState.order.id.slice(-6).toUpperCase()}`}
+          customerOrVendorName={paymentSheetState.order.customer_name || 'Walk-in Customer'}
+          totalAmount={Number(paymentSheetState.order.total_amount) || 0}
+          amountPaid={Number(paymentSheetState.order.amount_paid) || 0}
+          balanceDue={paymentSheetState.order.balance_due !== undefined && paymentSheetState.order.balance_due !== null ? Number(paymentSheetState.order.balance_due) : Math.max(0, (Number(paymentSheetState.order.total_amount) || 0) - (Number(paymentSheetState.order.amount_paid) || 0))}
+          ownerId={paymentSheetState.order.owner_id}
+          onPaymentRecorded={() => loadData()}
+        />
+      )}
     </div>
   )
 }

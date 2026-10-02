@@ -37,27 +37,37 @@ export default function EmployeeLoginPage() {
       if (!data.user) throw new Error("No user returned from login")
 
       // Verify user is an employee
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
-
-      if (profileError) {
+      let { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
+      if (profileError && profileError.code === "PGRST116") {
+        // Create missing profile for the employee
+        const { error: insertError } = await supabase.from("profiles").insert({
+          id: data.user.id,
+          role: "employee",
+        })
+        if (insertError) {
+          throw new Error(`Failed to create employee profile: ${insertError.message}`)
+        }
+        // Retry fetching the profile after insertion
+        const { data: newProfile, error: newProfileError } = await supabase
+          .from("profiles")
+          .select("role")
+          .eq("id", data.user.id)
+          .single()
+        if (newProfileError) {
+          throw new Error(`Profile verification failed after creation: ${newProfileError.message}`)
+        }
+        profile = newProfile
+      }
+      
+      if (profileError && profileError.code !== "PGRST116") {
         console.error("Profile verification error:", profileError)
         await supabase.auth.signOut({ scope: "local" })
-        if (profileError.code === "PGRST116") {
-          throw new Error("No profile found for this account. Please reach out to your owner.")
-        }
         throw new Error(`Could not verify account type: ${profileError.message}`)
       }
 
-      if (profile?.role !== "employee") {
-        await supabase.auth.signOut({ scope: "local" })
-        setError("This account is not an employee account. Please use owner login.")
-        setLoading(false)
-        return
-      }
-
-      // Success - middleware will handle routing
+      // Success - redirect router handles role and owner verification
       setLoading(false)
-      router.push("/dashboard/overview")
+      router.push("/auth/redirect")
       router.refresh()
     } catch (err: any) {
       setError(err.message || "Invalid email or password")

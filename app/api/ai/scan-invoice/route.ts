@@ -52,8 +52,9 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: data.error?.message || "AI failed to process the invoice image." }, { status: 400 })
     }
 
-    const content = data.choices[0].message.content
-    const result = JSON.parse(content)
+    const rawContent = data.choices[0].message.content || "{}"
+    const cleanContent = rawContent.replace(/```json/gi, "").replace(/```/g, "").trim()
+    const result = JSON.parse(cleanContent)
 
     return NextResponse.json(result)
   } catch (error: any) {

@@ -26,6 +26,8 @@ interface BusinessContextValue {
   /** Super Admin: Impersonate a business owner */
   impersonateOwner: (ownerId: string | null) => void
   isImpersonating: boolean
+  isOwner: boolean
+  can: (permission: string) => boolean
 }
 
 const BusinessContext = createContext<BusinessContextValue>({
@@ -39,6 +41,8 @@ const BusinessContext = createContext<BusinessContextValue>({
   exchangeRates: null,
   impersonateOwner: () => {},
   isImpersonating: false,
+  isOwner: true,
+  can: () => true,
 })
 
 export function BusinessProvider({ children }: { children: React.ReactNode }) {
@@ -190,6 +194,9 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
     }
   }, [authUser?.id, loadProfile])
 
+  const isOwner = profile?.role === "owner" || profile?.role === "admin" || !profile?.role
+  const can = useCallback((_permission: string) => isOwner, [isOwner])
+
   return (
     <BusinessContext.Provider
       value={{
@@ -203,6 +210,8 @@ export function BusinessProvider({ children }: { children: React.ReactNode }) {
         exchangeRates,
         impersonateOwner,
         isImpersonating,
+        isOwner,
+        can,
       }}
     >
       {children}

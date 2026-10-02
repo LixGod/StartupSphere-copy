@@ -41,19 +41,25 @@ export default function EmployeeSignUpPage() {
     setLoading(true)
 
     try {
-      // Validate that the owner email belongs to a registered owner via secure RPC
-      const { data: ownerExists, error: ownerError } = await supabase
-        .rpc("check_owner_email_exists", { p_email: formData.ownerEmail })
+      // Trim and normalize email for lookup
+      const ownerEmail = formData.ownerEmail.trim().toLowerCase();
+      const { data: ownerId, error: ownerError } = await supabase.rpc('get_owner_by_email', {
+        p_email: ownerEmail,
+      })
 
-      if (ownerError || !ownerExists) {
-        setError("No registered owner found with that email. Please check with your employer.")
+      if (ownerError || !ownerId) {
+        setError(
+          'No owner account found with this email. ' +
+          'Please check the email address and try again.'
+        )
         setLoading(false)
         return
       }
 
       const { error: requestError } = await supabase.from("employee_requests").insert({
-        owner_email: formData.ownerEmail,
-        employee_email: formData.email,
+        owner_id: ownerId,
+        owner_email: ownerEmail,
+        employee_email: formData.email.trim(),
         employee_password_hash: formData.password,
         status: "pending",
       })

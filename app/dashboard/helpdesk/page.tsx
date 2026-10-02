@@ -54,8 +54,13 @@ export default function HelpdeskPage() {
 
   const handleStatusChange = async (ticketId: string, newStatus: string) => {
     try {
-      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, status: newStatus as any } : t))
-      await updateSupportTicket(ticketId, { status: newStatus as any })
+      const isClosedOrResolved = newStatus === 'closed' || newStatus === 'resolved'
+      const updates: any = { 
+        status: newStatus as any,
+        ...(isClosedOrResolved ? { resolved_at: new Date().toISOString() } : {})
+      }
+      setTickets(prev => prev.map(t => t.id === ticketId ? { ...t, ...updates } : t))
+      await updateSupportTicket(ticketId, updates)
     } catch (error) {
       console.error("Error updating ticket:", error)
       loadTickets()

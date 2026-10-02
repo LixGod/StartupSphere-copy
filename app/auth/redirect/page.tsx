@@ -31,7 +31,7 @@ export default function AuthRedirect() {
 
       const { data: profile, error: profileError } = await supabase
         .from("profiles")
-        .select("role")
+        .select("role, owner_id, is_super_admin")
         .eq("id", user.id)
         .single()
 
@@ -40,10 +40,18 @@ export default function AuthRedirect() {
         return
       }
 
-      if (profile.role === "owner" || profile.role === "employee") {
+      if (profile.role === "admin" || profile.is_super_admin) {
+        router.replace("/admin")
+      } else if (profile.role === "owner") {
+        router.replace("/dashboard/overview")
+      } else if (profile.role === "employee") {
+        if (!profile.owner_id) {
+          router.replace("/auth/employee-login?error=pending")
+          return
+        }
         router.replace("/dashboard/overview")
       } else {
-        router.replace("/auth/login")
+        router.replace("/dashboard/overview")
       }
     } catch (err) {
       if (isAuthRateLimitError(err)) {

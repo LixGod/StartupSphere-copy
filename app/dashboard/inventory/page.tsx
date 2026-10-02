@@ -1,9 +1,10 @@
 "use client"
 
 import type React from "react"
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { usePermissions } from "@/lib/hooks/use-permissions"
+import { useBranch } from "@/components/providers/branch-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { useRouter } from "next/navigation"
@@ -18,6 +19,9 @@ import { toast } from "sonner"
 import { MAX_FILE_SIZE_MB } from "@/lib/constants"
 import { VoiceInputButton } from "@/components/ui/voice-input-button"
 import { useVoiceFormFill } from "@/lib/hooks/use-voice-form-fill"
+import { ManufacturerSearch } from "@/components/ui/manufacturer-search"
+import { upsertManufacturer } from "@/lib/api/manufacturers"
+import { upsertCustomer } from "@/lib/api/customers"
 import { Loader2 } from "lucide-react"
 import {
   Dialog,
@@ -96,15 +100,20 @@ function mapApiItemsToReviewRows(items: Array<Record<string, unknown>>): Scanned
 
 export default function InventoryPage() {
   const { profile: businessProfile, formatPrice, ownerId } = useBusinessContext()
-  const { isOwner, activeBranchId, can } = usePermissions()
+  const { isOwner, can } = usePermissions()
+  const { activeBranchId } = useBranch()
   const [selectedLocationId, setSelectedLocationId] = useState<string>("global")
+  const canViewInventory = isOwner || can('can_view_inventory')
+  const canEditInventory = isOwner || can('can_edit_inventory')
 
-  // Lock employees to their assigned branch
+  // Sync branch selector → location filter for both owners and employees
   useEffect(() => {
-    if (!isOwner && activeBranchId) {
+    if (activeBranchId) {
       setSelectedLocationId(activeBranchId)
+    } else if (isOwner) {
+      setSelectedLocationId("global")
     }
-  }, [isOwner, activeBranchId])
+  }, [activeBranchId, isOwner])
   
   const { 
     loading, 
@@ -150,15 +159,39 @@ export default function InventoryPage() {
   const [scannedReceiptBase64, setScannedReceiptBase64] = useState<string | null>(null)
   const [isImportingScanned, setIsImportingScanned] = useState(false)
   const [voiceFilledFields, setVoiceFilledFields] = useState<Set<string>>(new Set())
+  const [activeFilter, setActiveFilter] = useState<'all' | 'low' | 'slow'>('all')
+  const [slowMovingProductIds, setSlowMovingProductIds] = useState<Set<string>>(new Set())
   const { isLoading: voiceFormLoading, fillForm } = useVoiceFormFill()
   const router = useRouter()
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   const profile = businessProfile
 
   useEffect(() => {
-    const locId = new URLSearchParams(window.location.search).get("locationId")
+    const params = new URLSearchParams(window.location.search)
+    const locId = params.get("locationId")
     if (locId) setSelectedLocationId(locId)
+    if (params.get("filter") === "slow") setActiveFilter("slow")
   }, [])
+
+  useEffect(() => {
+    if (!ownerId || !products.length) return
+    const fetchRecentOrderItems = async () => {
+      const thirtyDaysAgo = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString()
+      const { data: items } = await supabaseRef.current
+        .from('order_items')
+        .select('product_id')
+        .gte('created_at', thirtyDaysAgo)
+      const activeIds = new Set((items || []).map(i => i.product_id))
+      const slowIds = new Set<string>()
+      products.forEach(p => {
+        if ((p.stock_quantity || 0) > (p.min_stock_level || 0) && !activeIds.has(p.id)) {
+          slowIds.add(p.id)
+        }
+      })
+      setSlowMovingProductIds(slowIds)
+    }
+    fetchRecentOrderItems()
+  }, [ownerId, products])
 
   const getProductAnalytics = () => {
     const productStats = products.map((product) => {
@@ -186,12 +219,26 @@ export default function InventoryPage() {
 
   const analytics = getProductAnalytics()
 
+  if (!canViewInventory) {
+    return (
+      <div className="p-4 sm:p-8">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 sm:p-16 text-center shadow-2xl">
+          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <ShieldCheck className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Access Restricted</h2>
+          <p className="text-slate-400 text-base max-w-md mx-auto">You do not have permission to view inventory for this branch.</p>
+        </div>
+      </div>
+    )
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabaseRef.current.auth.getUser()
 
       if (!user) return
 
@@ -199,22 +246,27 @@ export default function InventoryPage() {
 
       let receiptUrl = null
       if (invoiceFile) {
+        if (invoiceFile.size > 2 * 1024 * 1024) {
+          toast.error("Receipt file must be under 2MB")
+          return
+        }
         const fileExt = invoiceFile.name.split('.').pop()
         const fileName = `${ownerId}/${Date.now()}-invoice.${fileExt}`
-        const { data: uploadData, error: uploadError } = await supabase.storage
+        const { data: uploadData, error: uploadError } = await supabaseRef.current.storage
           .from('receipts')
           .upload(fileName, invoiceFile)
         
         if (uploadError) {
           console.error("Storage error:", uploadError)
         } else {
-          const { data: { publicUrl } } = supabase.storage.from('receipts').getPublicUrl(fileName)
+          const { data: { publicUrl } } = supabaseRef.current.storage.from('receipts').getPublicUrl(fileName)
           receiptUrl = publicUrl
         }
       }
 
       const productData = {
         owner_id: ownerId,
+        location_id: (selectedLocationId && selectedLocationId !== "global") ? selectedLocationId : ((formData as any).location_id || null),
         name: formData.name,
         sku: formData.sku,
         price: Number.parseFloat(formData.price),
@@ -255,6 +307,49 @@ export default function InventoryPage() {
         })
       }
 
+      // Auto-upsert manufacturer record and record expense entry
+      const costPrice = Number.parseFloat(formData.costPrice) || 0
+      const stockQty = Number.parseInt(formData.stockQuantity, 10) || 0
+      const totalPurchaseCost = costPrice * stockQty
+
+      let mfrId: string | undefined = undefined
+      if (formData.manufacturerName.trim()) {
+        try {
+          const savedMfr = await upsertManufacturer({
+            owner_id: ownerId,
+            name: formData.manufacturerName,
+            address: formData.manufacturerAddress,
+            gstin: formData.manufacturerGstin,
+            amountToAdd: totalPurchaseCost,
+          })
+          if (savedMfr?.id) {
+            mfrId = savedMfr.id
+            if (productId) {
+              await updateProduct(productId, { manufacturer_id: mfrId })
+            }
+          }
+        } catch (mErr) {
+          console.warn('Manufacturer auto-save skipped:', mErr)
+        }
+      }
+
+      if (totalPurchaseCost > 0) {
+        try {
+          await createExpense({
+            owner_id: ownerId,
+            category: "Inventory Purchase",
+            amount: totalPurchaseCost,
+            description: `Inventory purchase for ${formData.name} (${stockQty} qty @ ₹${costPrice})`,
+            expense_date: new Date().toISOString().split("T")[0],
+            gst_applicable: false,
+            manufacturer_id: mfrId,
+            vendor_name: formData.manufacturerName.trim() || undefined,
+          })
+        } catch (expErr) {
+          console.warn("Expense auto-creation skipped:", expErr)
+        }
+      }
+
       setFormData({ 
         name: "", sku: "", price: "", costPrice: "", stockQuantity: "", minStockLevel: "10", category: "",
         manufacturerName: "", manufacturerAddress: "", manufacturerGstin: "", purchaseGstRate: "18"
@@ -288,13 +383,33 @@ export default function InventoryPage() {
     setShowForm(true)
   }
 
+  const moveToTrash = async (product: any, reason: string) => {
+    try {
+      await supabaseRef.current.from("bill_trash").insert({
+        owner_id: ownerId,
+        category: "inventory",
+        invoice_number: product.sku || product.name,
+        customer_name: product.name,
+        total_amount: (product.price || 0) * (product.stock_quantity || 0),
+        order_date: product.created_at || new Date().toISOString(),
+        reason,
+        original_data: product,
+        trashed_at: new Date().toISOString()
+      })
+    } catch (err) {
+      console.warn("Could not save product to trash:", err)
+    }
+  }
+
   const handleDelete = async (id: string) => {
     if (!confirm("Are you sure you want to delete this product?")) return
     try {
+      const targetProd = products.find(p => p.id === id)
+      if (targetProd) await moveToTrash(targetProd, "Product deleted")
       await deleteProduct(id)
-      alert("Product deleted successfully")
+      toast.success("Product deleted and moved to Trash")
     } catch (error: any) {
-      alert("Error deleting product: " + error.message)
+      toast.error("Error deleting product: " + error.message)
     }
   }
 
@@ -302,12 +417,16 @@ export default function InventoryPage() {
     if (!confirm(`Are you sure you want to delete ${selectedIds.length} products?`)) return
     
     try {
+      for (const id of selectedIds) {
+        const targetProd = products.find(p => p.id === id)
+        if (targetProd) await moveToTrash(targetProd, "Product deleted")
+      }
       await deleteProducts(selectedIds)
       setSelectedIds([])
-      alert("Selected products deleted successfully!")
+      toast.success("Selected products deleted and moved to Trash")
       loadData()
     } catch (error: any) {
-      alert("Error deleting products: " + error.message)
+      toast.error("Error deleting products: " + error.message)
     }
   }
 
@@ -349,7 +468,7 @@ export default function InventoryPage() {
 
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) return
 
     const ownerId = profile?.role === "owner" ? user.id : profile?.owner_id
@@ -360,9 +479,24 @@ export default function InventoryPage() {
     const totalAmount = subtotal + gstAmount
 
     try {
+      let savedCustId: string | undefined = undefined
+      if (saleData.customerName && saleData.customerName !== "Walk-in Customer") {
+        try {
+          const savedCust = await upsertCustomer({
+            owner_id: ownerId,
+            name: saleData.customerName,
+            amountToAdd: totalAmount,
+          })
+          if (savedCust?.id) savedCustId = savedCust.id
+        } catch (cErr) {
+          console.error("Auto customer save error:", cErr)
+        }
+      }
+
       // Use automated API functions
       const order = await createOrder({
         owner_id: ownerId,
+        customer_id: savedCustId,
         created_by: user.id,
         customer_name: saleData.customerName || "Walk-in Customer",
         total_amount: totalAmount,
@@ -422,7 +556,7 @@ export default function InventoryPage() {
       const text = event.target?.result as string
       const lines = text.split("\n").filter((line) => line.trim())
       
-      const { data: { user } } = await supabase.auth.getUser()
+      const { data: { user } } = await supabaseRef.current.auth.getUser()
       if (!user) return
       const ownerId = profile?.role === "owner" ? user.id : profile?.owner_id
 
@@ -431,7 +565,7 @@ export default function InventoryPage() {
         const values = lines[i].split(",").map((v) => v.trim())
         if (values.length < 5) continue
 
-        await supabase.from("products").insert({
+        await supabaseRef.current.from("products").insert({
           owner_id: ownerId,
           name: values[0],
           sku: values[1],
@@ -561,7 +695,7 @@ export default function InventoryPage() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabaseRef.current.auth.getUser()
       if (!user) {
         toast.error("Please log in to import products")
         return
@@ -577,10 +711,10 @@ export default function InventoryPage() {
         try {
           const blob = await (await fetch(scannedReceiptBase64)).blob()
           const fileName = `${resolvedOwnerId}/${Date.now()}-ai-scan.png`
-          await supabase.storage.from("receipts").upload(fileName, blob)
+          await supabaseRef.current.storage.from("receipts").upload(fileName, blob)
           const {
             data: { publicUrl },
-          } = supabase.storage.from("receipts").getPublicUrl(fileName)
+          } = supabaseRef.current.storage.from("receipts").getPublicUrl(fileName)
           scannedReceiptUrl = publicUrl
         } catch (uploadErr) {
           console.error("Failed to auto-save scanned invoice:", uploadErr)
@@ -840,8 +974,7 @@ export default function InventoryPage() {
                   quantity: "1",
                   buying_price: "",
                   selling_price: "",
-                },
-              ])
+                }])
             }
           >
             <Plus className="w-4 h-4 mr-2" />
@@ -1163,11 +1296,18 @@ export default function InventoryPage() {
             <div className="md:col-span-2 border-t border-slate-800 pt-4 mt-2">
               <h4 className="text-sm font-semibold text-slate-400 mb-3 uppercase tracking-wider">Manufacturer / Supplier Details</h4>
               <div className="grid md:grid-cols-3 gap-4">
-                <Input
-                  placeholder="Manufacturer Name"
+                <ManufacturerSearch
+                  ownerId={ownerId || ""}
                   value={formData.manufacturerName}
-                  onChange={(e) => setFormData({ ...formData, manufacturerName: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
+                  onChange={(val) => setFormData((prev) => ({ ...prev, manufacturerName: val }))}
+                  onSelect={(m) =>
+                    setFormData((prev) => ({
+                      ...prev,
+                      manufacturerName: m.name,
+                      manufacturerGstin: m.gstin || prev.manufacturerGstin,
+                      manufacturerAddress: m.address || prev.manufacturerAddress,
+                    }))
+                  }
                 />
                 <Input
                   placeholder="Manufacturer GSTIN"
@@ -1234,6 +1374,34 @@ export default function InventoryPage() {
         </div>
       )}
 
+      {/* Filter Tabs Header */}
+      <div className="flex items-center gap-2 mb-4 flex-wrap">
+        <Button
+          size="sm"
+          variant={activeFilter === 'all' ? 'default' : 'outline'}
+          className={activeFilter === 'all' ? 'bg-blue-600' : 'border-slate-800 text-slate-400'}
+          onClick={() => setActiveFilter('all')}
+        >
+          All Products ({products.length})
+        </Button>
+        <Button
+          size="sm"
+          variant={activeFilter === 'low' ? 'default' : 'outline'}
+          className={activeFilter === 'low' ? 'bg-red-600' : 'border-slate-800 text-slate-400'}
+          onClick={() => setActiveFilter('low')}
+        >
+          ⚠️ Low Stock ({products.filter(p => p.stock_quantity <= p.min_stock_level).length})
+        </Button>
+        <Button
+          size="sm"
+          variant={activeFilter === 'slow' ? 'default' : 'outline'}
+          className={activeFilter === 'slow' ? 'bg-amber-600 text-white' : 'border-slate-800 text-slate-400'}
+          onClick={() => setActiveFilter('slow')}
+        >
+          🐢 Slow Moving ({slowMovingProductIds.size})
+        </Button>
+      </div>
+
       <div className="bg-slate-900 border border-slate-800 rounded-xl overflow-hidden shadow-xl">
         {loading ? (
           <div className="p-8 text-center text-slate-400">Loading inventory...</div>
@@ -1274,7 +1442,13 @@ export default function InventoryPage() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {products.map((product) => (
+                  {products
+                    .filter((p) => {
+                      if (activeFilter === 'low') return p.stock_quantity <= p.min_stock_level
+                      if (activeFilter === 'slow') return slowMovingProductIds.has(p.id)
+                      return true
+                    })
+                    .map((product) => (
                     <tr key={product.id} className={`hover:bg-slate-800/50 transition-colors ${selectedIds.includes(product.id) ? 'bg-blue-900/10' : ''}`}>
                       <td className="px-6 py-4">
                         <input 
@@ -1303,6 +1477,10 @@ export default function InventoryPage() {
                           <div className="flex items-center gap-1 text-red-400 text-sm">
                             <AlertTriangle className="w-4 h-4" />
                             <span>Low Stock</span>
+                          </div>
+                        ) : slowMovingProductIds.has(product.id) ? (
+                          <div className="inline-flex items-center gap-1 text-amber-400 text-xs font-semibold bg-amber-950/40 px-2 py-0.5 rounded border border-amber-900/50">
+                            <span>🐢 Slow Moving</span>
                           </div>
                         ) : (
                           <span className="text-green-400 text-sm">In Stock</span>

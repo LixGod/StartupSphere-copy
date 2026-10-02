@@ -3,6 +3,8 @@
 import { useEffect, useState, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useAuth } from "@/components/providers/auth-provider"
+import { useBusinessContext } from "@/lib/hooks/use-business-context"
+import { useBranch } from "@/components/providers/branch-provider"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Textarea } from "@/components/ui/textarea"
@@ -43,8 +45,10 @@ import { ContentCalendar, CalendarItem } from "@/components/ai-marketing/Content
 import { TRENDING_REEL_FORMATS, INDIAN_CONTENT_OCCASIONS } from "@/lib/constants"
 
 export default function AIMarketingPage() {
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   const { user } = useAuth()
+  const { ownerId: ctxOwnerId } = useBusinessContext()
+  const { activeBranchId } = useBranch()
   const { toast } = useToast()
 
   const [userEmail, setUserEmail] = useState("")
@@ -114,10 +118,10 @@ export default function AIMarketingPage() {
   useEffect(() => {
     const fetchInventory = async () => {
       try {
-        const { data: { user: currentUser } } = await supabase.auth.getUser()
+        const { data: { user: currentUser } } = await supabaseRef.current.auth.getUser()
         if (!currentUser) return
 
-        const { data: profile } = await supabase
+        const { data: profile } = await supabaseRef.current
           .from("profiles")
           .select("owner_id, role, company_name")
           .eq("id", currentUser.id)
@@ -130,18 +134,23 @@ export default function AIMarketingPage() {
           setBusinessName(profile.company_name)
         }
 
-        const { data: productsData } = await supabase
+        let query = supabaseRef.current
           .from("products")
           .select("*")
           .eq("owner_id", ownerId)
 
+        if (activeBranchId) {
+          query = query.or(`location_id.eq.${activeBranchId},location_id.is.null`)
+        }
+
+        const { data: productsData } = await query
         setInventoryProducts(productsData || [])
       } catch (err) {
         console.error("Error loading products:", err)
       }
     }
     fetchInventory()
-  }, [supabase])
+  }, [activeBranchId])
 
   // Fetch trends on mount or when Tab 2 is active
   const fetchTrends = async (force = false) => {
@@ -1142,8 +1151,7 @@ export default function AIMarketingPage() {
                   { num: 1, label: "Analyzing Indian festival calendars..." },
                   { num: 2, label: "Crawling live YouTube video feeds..." },
                   { num: 3, label: "Aggregating active Instagram memes..." },
-                  { num: 4, label: "Generating 30-day posting roadmap..." },
-                ].map(step => {
+                  { num: 4, label: "Generating 30-day posting roadmap..." }].map(step => {
                   const isActive = calendarStep === step.num
                   const isDone = calendarStep !== null && calendarStep > step.num
                   return (

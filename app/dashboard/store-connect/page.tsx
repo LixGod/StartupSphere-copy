@@ -31,7 +31,8 @@ export default function StoreConnectPage() {
     try {
       if (platform === "shopify") {
         // Validate Shopify credentials
-        const response = await fetch(`https://${storeUrl}/admin/api/2024-01/products.json`, {
+        const cleanStoreUrl = storeUrl.trim().replace(/^https?:\/\//i, '').replace(/\/$/, '')
+        const response = await fetch(`https://${cleanStoreUrl}/admin/api/2024-01/products.json`, {
           headers: {
             'X-Shopify-Access-Token': accessToken,
             'Content-Type': 'application/json',

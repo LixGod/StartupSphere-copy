@@ -1,8 +1,15 @@
-import Groq from "groq-sdk";
+let groqClient: any = null
 
-export const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-});
+export function getGroqClient() {
+  if (!process.env.GROQ_API_KEY) return null
+  if (!groqClient) {
+    const Groq = require("groq-sdk")
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+  }
+  return groqClient
+}
+
+export const groq = getGroqClient()
 
 /**
  * Safely parses JSON by stripping out markdown blocks if present.

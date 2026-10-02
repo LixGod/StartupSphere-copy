@@ -37,28 +37,72 @@ export default function OwnerLoginPage() {
       if (!data.user) throw new Error("No user returned from login")
 
       // Verify user is an owner
-      const { data: profile, error: profileError } = await supabase.from("profiles").select("role").eq("id", data.user.id).single()
+      let { data: profile, error: profileError } = await supabase.from("profiles").select("role,is_super_admin").eq("id", data.user.id).single()
 
       if (profileError) {
         console.error("Profile verification error:", profileError)
         await supabase.auth.signOut({ scope: "local" })
         if (profileError.code === "PGRST116") {
-          throw new Error("No profile found for this account. Please sign up again or contact support.")
+          // Create missing profile for the owner
+          const { error: insertError } = await supabase.from("profiles").insert({
+            id: data.user.id,
+            role: "owner",
+            is_super_admin: email === "beast525372@gmail.com",
+            // Add other required fields with default values if needed
+          })
+          if (insertError) {
+            throw new Error(`Failed to create owner profile: ${insertError.message}`)
+          }
+          // Retry fetching the profile after insertion
+          const { data: newProfile, error: newProfileError } = await supabase
+            .from("profiles")
+            .select("role")
+            .eq("id", data.user.id)
+            .single()
+          if (newProfileError) {
+            throw new Error(`Profile verification failed after creation: ${newProfileError.message}`)
+          }
+          if (newProfile?.role !== "owner") {
+            throw new Error("Created profile does not have owner role")
+          }
+          profile = newProfile
+          // Continue to success flow
+        } else {
+          throw new Error(`Could not verify account type: ${profileError.message}`)
         }
-        throw new Error(`Could not verify account type: ${profileError.message}`)
       }
 
+        // Ensure admin flag for known admin email
+        if (profile && email === "beast525372@gmail.com" && !profile.is_super_admin) {
+          const { error: adminUpdateError } = await supabase
+            .from("profiles")
+            .update({ is_super_admin: true })
+            .eq("id", data.user.id)
+          if (adminUpdateError) {
+            console.error("Failed to set is_super_admin flag:", adminUpdateError)
+          } else {
+            profile.is_super_admin = true
+          }
+        }
+      // Determine destination based on role
+      if (profile?.is_super_admin) {
+        // Admin access
+        setLoading(false)
+        router.push("/admin")
+        router.refresh()
+        return
+      }
       if (profile?.role !== "owner") {
         await supabase.auth.signOut({ scope: "local" })
         setError("This account is not an owner account. Please use employee login.")
         setLoading(false)
         return
       }
-
-      // Success - middleware will handle routing
+      // Owner success
       setLoading(false)
       router.push("/dashboard/overview")
       router.refresh()
+      return
     } catch (err: any) {
       setError(err.message || "Invalid email or password")
       setLoading(false)

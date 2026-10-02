@@ -1,6 +1,7 @@
 "use client"
 
 import React, { useState, useEffect } from "react"
+import { createClient } from "@/lib/supabase/client"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { getLocations, getBulkOrders, getWholesaleTiers, createLocation, createWholesaleTier, getProducts as getInventory } from "@/lib/api"
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
@@ -20,6 +21,7 @@ import { useRouter } from "next/navigation"
 
 export default function MultiStorePage() {
   const { ownerId, formatPrice, loading: contextLoading } = useBusinessContext()
+  const supabase = createClient()
   const [loading, setLoading] = useState(true)
   const [locations, setLocations] = useState<any[]>([])
   const [bulkOrders, setBulkOrders] = useState<any[]>([])
@@ -28,6 +30,7 @@ export default function MultiStorePage() {
 
   const [showLocationModal, setShowLocationModal] = useState(false)
   const [showTransferModal, setShowTransferModal] = useState(false)
+  const [deactivateTarget, setDeactivateTarget] = useState<BusinessLocation | null>(null)
   const [transferData, setTransferData] = useState({
     productId: "",
     fromLoc: "",
@@ -40,6 +43,23 @@ export default function MultiStorePage() {
   useEffect(() => {
     if (ownerId) loadData()
   }, [ownerId])
+
+  const handleToggleDeactivate = async (location: BusinessLocation) => {
+    try {
+      const supabase = createClient()
+      const { error } = await supabase
+        .from('business_locations')
+        .update({ is_active: !location.is_active })
+        .eq('id', location.id)
+      
+      if (error) throw error
+      toast.success(`Location ${location.is_active ? 'deactivated' : 'activated'} successfully`)
+      setDeactivateTarget(null)
+      loadData()
+    } catch (err: any) {
+      toast.error("Failed to update location status: " + err.message)
+    }
+  }
 
   const loadData = async () => {
     setLoading(true)
@@ -138,7 +158,15 @@ export default function MultiStorePage() {
                     <div className="p-3 bg-slate-800 text-blue-400 rounded-2xl group-hover:bg-blue-600 group-hover:text-white transition-all">
                        {loc.type === 'warehouse' ? <Warehouse className="w-6 h-6" /> : <Store className="w-6 h-6" />}
                     </div>
-                    <Badge className="bg-emerald-500/10 text-emerald-500 border-0">{loc.is_active ? 'Active' : 'Inactive'}</Badge>
+                    <button
+                      type="button"
+                      onClick={() => setDeactivateTarget(loc)}
+                      className="cursor-pointer hover:opacity-80 transition-opacity"
+                    >
+                      <Badge className={loc.is_active ? "bg-emerald-500/10 text-emerald-500 border-0" : "bg-red-500/10 text-red-500 border-0"}>
+                        {loc.is_active ? 'Active' : 'Inactive'}
+                      </Badge>
+                    </button>
                  </div>
                  <h3 className="text-xl font-bold text-white mb-1">{loc.name}</h3>
                  <p className="text-xs text-slate-500 mb-6 flex items-center gap-2"><Truck className="w-3 h-3" /> {loc.address}</p>
@@ -287,6 +315,36 @@ export default function MultiStorePage() {
                </div>
                <Button className="w-full bg-blue-600 h-14 font-bold mt-6 shadow-xl shadow-blue-900/40" onClick={handleTransfer}>Authorize Transfer</Button>
                <Button variant="ghost" className="w-full text-slate-500" onClick={() => setShowTransferModal(false)}>Cancel</Button>
+            </div>
+          </div>
+        </div>
+      )}
+      {/* Deactivation Confirmation Modal */}
+      {deactivateTarget && (
+        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50 p-4 animate-in fade-in">
+          <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 max-w-md w-full shadow-2xl">
+            <h3 className="text-xl font-bold text-white mb-2">
+              {deactivateTarget.is_active ? "Deactivate Branch?" : "Activate Branch?"}
+            </h3>
+            <p className="text-slate-400 text-sm mb-6">
+              Are you sure you want to {deactivateTarget.is_active ? "deactivate" : "reactivate"}{" "}
+              <strong className="text-white">{deactivateTarget.name}</strong>?
+              {deactivateTarget.is_active && " Employees assigned to this branch will lose access to its localized inventory."}
+            </p>
+            <div className="flex gap-3">
+              <Button
+                variant="outline"
+                className="flex-1 border-slate-700 text-slate-300"
+                onClick={() => setDeactivateTarget(null)}
+              >
+                Cancel
+              </Button>
+              <Button
+                className={deactivateTarget.is_active ? "flex-1 bg-red-600 hover:bg-red-700 text-white" : "flex-1 bg-emerald-600 hover:bg-emerald-700 text-white"}
+                onClick={() => handleToggleDeactivate(deactivateTarget)}
+              >
+                Confirm {deactivateTarget.is_active ? "Deactivation" : "Activation"}
+              </Button>
             </div>
           </div>
         </div>

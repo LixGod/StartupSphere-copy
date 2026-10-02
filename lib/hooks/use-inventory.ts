@@ -23,25 +23,10 @@ export function useInventory(ownerId: string | null, selectedLocationId: string 
     if (!ownerId) return
     setLoading(true)
     try {
-      const [locationsData] = await Promise.all([
-        getLocations(ownerId)
+      const [locationsData, productsData] = await Promise.all([
+        getLocations(ownerId),
+        getProducts(ownerId, selectedLocationId === "global" ? null : selectedLocationId, true /* strictBranch: inventory only shows exact branch products */)
       ])
-      
-      let productsData: Product[] = []
-      
-      if (selectedLocationId === "global") {
-        productsData = await getProducts(ownerId)
-      } else {
-        const { getLocationInventory } = await import("@/lib/api")
-        const locInv = await getLocationInventory(selectedLocationId)
-        // Map location-specific stock to product objects
-        productsData = locInv.map(item => ({
-          ...item.products,
-          stock_quantity: item.stock_quantity,
-          min_stock_level: item.min_stock_level
-        }))
-      }
-
       setProducts(productsData)
       setLocations(locationsData)
       setError(null)

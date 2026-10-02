@@ -26,6 +26,7 @@ import {
   BrainCircuit,
   Settings,
   Zap,
+  Trash2,
 } from "lucide-react"
 import { BranchSelector } from "@/components/branch-selector"
 
@@ -40,7 +41,7 @@ export function DashboardNav({ user }: { user: any }) {
   const router = useRouter()
   const pathname = usePathname()
   const supabase = createClient()
-  const { profile } = useBusinessContext()
+  const { profile, isOwner, can } = useBusinessContext()
   const [loading, setLoading] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const [collapsed, setCollapsed] = useState(false)
@@ -104,21 +105,24 @@ export function DashboardNav({ user }: { user: any }) {
 
   const allNavItems = [
     { href: "/dashboard/overview", label: "Overview", icon: Home, group: "Main" },
-    { href: "/dashboard/crm-founder", label: "Founder CRM", icon: Users, group: "Sales", pack: "has_crm_pack", globalOnly: true },
-    { href: "/dashboard/helpdesk", label: "Helpdesk", icon: AlertCircle, group: "Sales", pack: "has_crm_pack", globalOnly: true },
-    { href: "/dashboard/multi-store", label: "Multi-Store & B2B", icon: Store, group: "Sales", pack: "has_multi_tenancy_pack", globalOnly: true },
-    { href: "/dashboard/inventory", label: "Inventory", icon: Package, group: "Operations", pack: "has_core_modules_pack" },
-    { href: "/dashboard/sales", label: "Sales & POS", icon: ShoppingCart, group: "Operations", pack: "has_core_modules_pack" },
-    { href: "/dashboard/accounting", label: "Accounting", icon: TrendingUp, group: "Finance", pack: "has_core_modules_pack" },
-    { href: "/dashboard/ai-intelligence", label: "AI Intelligence", icon: BrainCircuit, group: "Growth", pack: "has_ai_analysis_pack", globalOnly: true },
-    { href: "/dashboard/ai-marketing", label: "AI Marketing", icon: Bot, group: "Growth", pack: "has_ai_analysis_pack", globalOnly: true },
+    { href: "/dashboard/crm-founder", label: "Founder CRM", icon: Users, group: "Sales", pack: "has_crm_pack", globalOnly: true, permission: "can_manage_crm" },
+    { href: "/dashboard/helpdesk", label: "Helpdesk", icon: AlertCircle, group: "Sales", pack: "has_crm_pack", globalOnly: true, permission: "can_manage_crm" },
+    { href: "/dashboard/multi-store", label: "Multi-Store & B2B", icon: Store, group: "Sales", pack: "has_multi_tenancy_pack", globalOnly: true, ownerOnly: true },
+    { href: "/dashboard/inventory", label: "Inventory", icon: Package, group: "Operations", pack: "has_core_modules_pack", permission: "can_view_inventory" },
+    { href: "/dashboard/manufacturers", label: "Manufacturers", icon: Store, group: "Operations", pack: "has_core_modules_pack", permission: "can_view_inventory" },
+    { href: "/dashboard/sales", label: "Sales & POS", icon: ShoppingCart, group: "Operations", pack: "has_core_modules_pack", permission: "can_view_sales" },
+    { href: "/dashboard/customers", label: "Customers", icon: Users, group: "Operations", pack: "has_core_modules_pack", permission: "can_view_sales" },
+    { href: "/dashboard/bills-trash", label: "Trash Bin", icon: Trash2, group: "Operations", pack: "has_core_modules_pack", permission: "can_view_sales" },
+    { href: "/dashboard/accounting", label: "Accounting", icon: TrendingUp, group: "Finance", pack: "has_core_modules_pack", permission: "can_view_accounting" },
+    { href: "/dashboard/ai-intelligence", label: "AI Intelligence", icon: BrainCircuit, group: "Growth", pack: "has_ai_analysis_pack", globalOnly: true, ownerOnly: true },
+    { href: "/dashboard/ai-marketing", label: "AI Marketing", icon: Bot, group: "Growth", pack: "has_ai_analysis_pack", globalOnly: true, ownerOnly: true },
 
-    { href: "/dashboard/employees", label: "Employees", icon: Users, group: "Settings", pack: "has_core_modules_pack" },
-    { href: "/dashboard/store-connect", label: "Connect Store", icon: Store, group: "Settings", pack: "has_multi_tenancy_pack", globalOnly: true },
+    { href: "/dashboard/employees", label: "Employees", icon: Users, group: "Settings", pack: "has_core_modules_pack", ownerOnly: true },
+    { href: "/dashboard/store-connect", label: "Connect Store", icon: Store, group: "Settings", pack: "has_multi_tenancy_pack", globalOnly: true, ownerOnly: true },
     { href: "/dashboard/settings", label: "Settings", icon: Settings, group: "Settings" },
   ]
 
-  // Filter items based on active packs AND location mode
+  // Filter items based on active packs, location mode, and RBAC permissions
   const navItems = allNavItems.filter(item => {
     // Check packs
     if (item.pack && profile?.[item.pack] !== true) return false
@@ -126,6 +130,12 @@ export function DashboardNav({ user }: { user: any }) {
     // Check Branch Mode
     if (locationId && (item as any).globalOnly) return false
     
+    // Check RBAC permissions for employees
+    if (!isOwner) {
+      if ((item as any).ownerOnly) return false
+      if ((item as any).permission && !can((item as any).permission as any)) return false
+    }
+
     return true
   })
 

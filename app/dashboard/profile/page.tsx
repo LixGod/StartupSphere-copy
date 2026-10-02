@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { useRouter } from "next/navigation"
 import { Button } from "@/components/ui/button"
@@ -21,7 +21,7 @@ export default function ProfilePage() {
   const [description, setDescription] = useState("")
   const [updating, setUpdating] = useState(false)
   const router = useRouter()
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
 
   useEffect(() => {
     loadProfile()
@@ -31,13 +31,13 @@ export default function ProfilePage() {
     setLoading(true)
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) {
       router.push("/auth/owner-login")
       return
     }
 
-     const { data } = await supabase.from("profiles").select("*").eq("id", user.id).single()
+     const { data } = await supabaseRef.current.from("profiles").select("*").eq("id", user.id).single()
     setProfile({ ...data, email: user.email })
     setCompanyName(data.company_name || "")
     setGstin(data.gstin || "")
@@ -55,10 +55,10 @@ export default function ProfilePage() {
     try {
       const {
         data: { user },
-      } = await supabase.auth.getUser()
+      } = await supabaseRef.current.auth.getUser()
       if (!user) return
 
-      const { error } = await supabase
+      const { error } = await supabaseRef.current
         .from("profiles")
         .update({
           company_name: companyName.trim(),
@@ -93,15 +93,15 @@ export default function ProfilePage() {
     setDeleting(true)
     const {
       data: { user },
-    } = await supabase.auth.getUser()
+    } = await supabaseRef.current.auth.getUser()
     if (!user) return
 
     try {
       // Delete profile
-      await supabase.from("profiles").delete().eq("id", user.id)
+      await supabaseRef.current.from("profiles").delete().eq("id", user.id)
 
       // Signout
-      await supabase.auth.signOut()
+      await supabaseRef.current.auth.signOut()
 
       // Redirect to home
       router.push("/")

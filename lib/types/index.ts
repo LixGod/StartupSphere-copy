@@ -77,6 +77,10 @@ export interface SalesOrder {
   customer_name: string | null
   customer_phone?: string | null
   customer_email?: string | null
+  customer_id?: string | null
+  amount_paid?: number
+  balance_due?: number
+  payment_status?: 'unpaid' | 'partial' | 'paid' | 'advance'
   notes: string | null
   location_id: string | null
   created_at: string
@@ -107,6 +111,10 @@ export interface Expense {
   gst_amount: number
   tax_filing_category?: string | null
   location_id: string | null
+  manufacturer_id?: string | null
+  amount_paid?: number
+  balance_due?: number
+  payment_status?: 'unpaid' | 'partial' | 'paid'
   itc_eligible: boolean
   created_at: string
 }
@@ -624,6 +632,113 @@ export interface CommsSettings {
   email_from_address: string | null
   verified_domains: string[]
   webhook_secret: string
+  created_at: string
+  updated_at: string
+}
+
+export interface Customer {
+  id: string
+  owner_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  city: string | null
+  gstin: string | null
+  total_purchases: number
+  total_paid: number
+  outstanding_balance: number
+  credit_limit: number
+  advance_balance: number
+  notes: string | null
+  tags: string[] | null
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface Manufacturer {
+  id: string
+  owner_id: string
+  name: string
+  phone: string | null
+  email: string | null
+  address: string | null
+  city: string | null
+  gstin: string | null
+  total_purchased: number
+  total_paid: number
+  outstanding_balance: number
+  advance_balance: number
+  notes: string | null
+  payment_terms: number
+  is_active: boolean
+  created_at: string
+  updated_at: string
+}
+
+export interface PaymentTransaction {
+  id: string
+  owner_id: string
+  created_by: string | null
+  reference_type: 'sale' | 'purchase' | 'expense'
+  reference_id: string
+  amount: number
+  payment_method: 'cash' | 'upi' | 'bank_transfer' | 'cheque' | 'card' | 'advance' | 'other'
+  payment_date: string
+  notes: string | null
+  cheque_number: string | null
+  cheque_date: string | null
+  cheque_bank: string | null
+  cheque_cleared: boolean
+  cheque_cleared_date: string | null
+  transaction_ref: string | null
+  created_at: string
+}
+
+export interface PurchaseOrder {
+  id: string
+  owner_id: string
+  manufacturer_id: string | null
+  location_id: string | null
+  po_number: string | null
+  status: 'draft' | 'sent' | 'confirmed' | 'received' | 'partial' | 'cancelled'
+  subtotal: number
+  gst_amount: number
+  total_amount: number
+  amount_paid: number
+  balance_due: number
+  expected_delivery_date: string | null
+  received_date: string | null
+  notes: string | null
+  is_auto_generated: boolean
+  created_at: string
+  updated_at: string
+  manufacturers?: Manufacturer
+  purchase_order_items?: PurchaseOrderItem[]
+}
+
+export interface PurchaseOrderItem {
+  id: string
+  purchase_order_id: string
+  product_id: string | null
+  product_name: string
+  quantity: number
+  unit_price: number
+  gst_percent: number
+  line_total: number
+  quantity_received: number
+  created_at: string
+}
+
+export interface SalesTarget {
+  id: string
+  owner_id: string
+  employee_id: string
+  target_amount: number
+  achieved_amount: number
+  period_month: number
+  period_year: number
   created_at: string
   updated_at: string
 }

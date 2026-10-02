@@ -3,13 +3,13 @@ import type { SalesOrder, OrderItem } from "@/lib/types"
 
 const supabase = () => createClient()
 
-export async function getOrders(ownerId: string, locationId?: string) {
+export async function getOrders(ownerId: string, locationId?: string | null) {
   let query = supabase()
     .from("sales_orders")
     .select("*, order_items(*, products(name))")
     .eq("owner_id", ownerId)
 
-  if (locationId) {
+  if (locationId && locationId !== "global") {
     query = query.eq("location_id", locationId)
   }
 
@@ -107,10 +107,17 @@ export async function createOrderItem(item: {
   quantity: number
   unit_price: number
   line_total: number
+  location_id?: string | null
 }) {
   const { data, error } = await supabase()
     .from("order_items")
-    .insert(item)
+    .insert({
+      order_id: item.order_id,
+      product_id: item.product_id,
+      quantity: item.quantity,
+      unit_price: item.unit_price,
+      line_total: item.line_total,
+    })
     .select()
     .single()
 
@@ -121,7 +128,7 @@ export async function createOrderItem(item: {
   try {
     const { data: product } = await supabase()
       .from("products")
-      .select("cost_price, name, owner_id")
+      .select("cost_price, name, owner_id, location_id")
       .eq("id", item.product_id)
       .single()
 
@@ -129,8 +136,12 @@ export async function createOrderItem(item: {
       const totalCogs = product.cost_price * item.quantity
       await supabase().from("expenses").insert({
         owner_id: product.owner_id,
+        location_id: item.location_id || product.location_id || null,
         category: "Cost of Goods Sold",
         amount: totalCogs,
+        amount_paid: totalCogs,
+        balance_due: 0,
+        payment_status: "paid",
         description: `COGS for ${item.quantity} units of ${product.name} (Order: ${item.order_id})`,
         expense_date: new Date().toISOString().split("T")[0],
         gst_applicable: false,

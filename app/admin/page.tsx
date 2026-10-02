@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -60,7 +60,7 @@ export default function SuperAdminPage() {
       supabase.from("owner_leads").select("*").order("created_at", { ascending: false }),
       supabase.from("approved_owners").select("*").order("approved_at", { ascending: false }),
       supabase.from("profiles").select("*").eq("role", "owner"),
-      supabase.from("business_locations").select("*, profiles!owner_id(company_name, email)"),
+      supabase.from("locations").select("*, profiles!owner_id(company_name, email)"),
       supabase.from("membership_requests").select("*, profiles(*)").order("created_at", { ascending: false })
     ])
  
@@ -71,83 +71,143 @@ export default function SuperAdminPage() {
     setMembershipRequests(requestsRes.data || [])
     setLoading(false)
 
-    // Realtime for membership requests
-    const requestsChannel = supabase
-      .channel('admin_membership_sync')
-      .on(
-        'postgres_changes',
-        { event: '*', schema: 'public', table: 'membership_requests' },
-        async (payload) => {
-          if (payload.eventType === 'INSERT') {
-            // Fetch the full request with profile data
-            const { data: fullReq } = await supabase
-              .from("membership_requests")
-              .select("*, profiles(*)")
-              .eq("id", payload.new.id)
-              .single()
-            
-            if (fullReq) {
-              setMembershipRequests(prev => [fullReq, ...prev])
-            }
-          } else if (payload.eventType === 'UPDATE') {
-            setMembershipRequests(prev => prev.map(r => 
-              r.id === payload.new.id ? { ...r, ...payload.new } : r
-            ))
+    // Realtime for membership requests – create channel, attach listeners, then subscribe
+    const requestsChannel = supabase.channel('admin_membership_sync')
+    // Listener for membership_requests changes
+    requestsChannel.on(
+      'postgres_changes',
+      { event: '*', schema: 'public', table: 'membership_requests' },
+      async (payload) => {
+        if (payload.eventType === 'INSERT') {
+          // Fetch the full request with profile data
+          const { data: fullReq } = await supabase
+            .from('membership_requests')
+            .select('*, profiles(*)')
+            .eq('id', payload.new.id)
+            .single()
+          if (fullReq) {
+            setMembershipRequests((prev) => [fullReq, ...prev])
           }
+        } else if (payload.eventType === 'UPDATE') {
+          setMembershipRequests((prev) =>
+            prev.map((r) => (r.id === payload.new.id ? { ...r, ...payload.new } : r))
+          )
         }
-      )
-      .subscribe()
+      }
+    )
+    // Additional realtime listeners can be added here before subscribing, e.g., for locations updates
+    // requestsChannel.on('postgres_changes', { event: '*', schema: 'public', table: 'locations' }, (payload) => {
+    //   // Refresh locations state when a new branch is added
+    //   checkAdminAndLoad()
+    // })
+    // Finally subscribe the channel
+    requestsChannel.subscribe()
 
     return () => {
       supabase.removeChannel(requestsChannel)
     }
   }
 
-  const handleApprove = async (email: string) => {
+  const handleApprove = async (email: string, ownerId?: string) => {
     try {
-      await supabase.from("approved_owners").insert({ email })
-      await supabase.from("owner_leads").update({ status: 'closed' }).eq("email", email)
+      const response = await fetch('/api/admin', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'approve_owner', email, ownerId })
+      }).catch(() => null)
+
+      // Fallback client side if API endpoint not present
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const adminDb = createAdminClient()
+      await adminDb.from("approved_owners").upsert({ email, approved_at: new Date().toISOString() })
+      await adminDb.from("owner_leads").update({ status: 'closed' }).eq("email", email)
+      if (ownerId) {
+        await adminDb.from("profiles").update({ status: 'active' }).eq("id", ownerId)
+      }
+      
       checkAdminAndLoad()
       alert(`Owner Approved: ${email}`)
     } catch (err: any) {
-      alert(err.message)
+      alert(err.message || 'Failed to approve owner')
+    }
+  }
+
+  const handleReject = async (leadId: string, email: string, ownerId?: string) => {
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const adminDb = createAdminClient()
+      await adminDb.from("owner_leads").update({ status: 'rejected' }).eq("id", leadId)
+      if (ownerId) {
+        await adminDb.from("profiles").update({ status: 'rejected' }).eq("id", ownerId)
+      }
+      checkAdminAndLoad()
+      alert(`Owner Request Rejected: ${email}`)
+    } catch (err: any) {
+      alert(err.message || 'Failed to reject owner')
+    }
+  }
+
+  const handleSuspend = async (userId: string, email: string) => {
+    if (!confirm(`Suspend account for ${email}?`)) return
+    try {
+      const { createAdminClient } = await import('@/lib/supabase/admin')
+      const adminDb = createAdminClient()
+      await adminDb.from("profiles").update({ status: 'suspended' }).eq("id", userId)
+      checkAdminAndLoad()
+      alert(`Account Suspended: ${email}`)
+    } catch (err: any) {
+      alert(err.message || 'Failed to suspend account')
     }
   }
 
   const handleDeleteApproved = async (email: string) => {
     if(!confirm("Remove access for this owner?")) return
-    await supabase.from("approved_owners").delete().eq("email", email)
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const adminDb = createAdminClient()
+    await adminDb.from("approved_owners").delete().eq("email", email)
     checkAdminAndLoad()
   }
 
   const handleAddManualOwner = async () => {
     if(!newOwnerEmail) return
-    await supabase.from("approved_owners").insert({ email: newOwnerEmail })
+    const { createAdminClient } = await import('@/lib/supabase/admin')
+    const adminDb = createAdminClient()
+    await adminDb.from("approved_owners").upsert({ email: newOwnerEmail.trim().toLowerCase() })
     setNewOwnerEmail("")
     checkAdminAndLoad()
   }
 
   const handleCreateBranch = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (!selectedOwner || !newBranchData.name) return
+    if (!selectedOwner || !newBranchData.name) {
+      alert('Please select an owner and provide a branch name.')
+      return
+    }
 
     try {
-      const { error } = await supabase.from("business_locations").insert({
+      const { data, error } = await supabase.from('locations').insert({
         owner_id: selectedOwner.id,
         name: newBranchData.name,
         type: newBranchData.type,
         address: newBranchData.address,
-        is_active: true
-      })
+        is_active: true,
+      }).select()
 
       if (error) throw error
 
+      // Optimistically update UI without full reload
+      if (data && data.length) {
+        setLocations((prev) => [...prev, data[0]])
+      }
+
       setShowBranchModal(false)
-      setNewBranchData({ name: "", type: "retail", address: "" })
+      setNewBranchData({ name: '', type: 'retail', address: '' })
+      // Refresh other related data
       checkAdminAndLoad()
-      alert("Branch registered successfully for " + selectedOwner.company_name)
+      alert(`Branch "${newBranchData.name}" registered successfully for ${selectedOwner.company_name}`)
     } catch (err: any) {
-      alert(err.message)
+      console.error('Branch creation error:', err)
+      alert(`Failed to create branch: ${err.message}`)
     }
   }
 

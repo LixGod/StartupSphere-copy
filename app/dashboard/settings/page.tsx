@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { getEmployeeRequests, updateProfile } from "@/lib/api"
 import type { EmployeeRequest, Profile as ProfileType } from "@/lib/types"
@@ -47,7 +47,8 @@ export default function SettingsPage() {
   const [requests, setRequests] = useState<EmployeeRequest[]>([])
   const [selectedPacks, setSelectedPacks] = useState<string[]>([])
   const [requesting, setRequesting] = useState(false)
-  const supabase = createClient()
+  const [autoPaymentReminders, setAutoPaymentReminders] = useState(true)
+  const supabaseRef = useRef(createClient())
 
   useEffect(() => {
     if (ownerId && profile) {
@@ -64,11 +65,10 @@ export default function SettingsPage() {
         setBaseCurrency(activeCurrency)
       }
       
-      // Load with individual error handling to prevent complete failure if one table is missing
-      const requestsData = profile?.role === 'owner' ? await getEmployeeRequests(profile.email!) : []
+      const requestsData = profile?.role === 'owner' && ownerId ? await getEmployeeRequests(ownerId) : []
       
       if (profile?.role === 'owner') {
-        const { data: empData } = await supabase
+        const { data: empData } = await supabaseRef.current
           .from("profiles")
           .select("*")
           .eq("owner_id", ownerId)
@@ -76,7 +76,18 @@ export default function SettingsPage() {
         setEmployees(empData || [])
       }
 
-      setRequests((requestsData || []) as EmployeeRequest[])
+      if (ownerId) {
+        const { data: cfg } = await supabaseRef.current
+          .from("user_configs")
+          .select("auto_payment_reminders")
+          .eq("user_id", ownerId)
+          .maybeSingle()
+        if (cfg) {
+          setAutoPaymentReminders(cfg.auto_payment_reminders !== false)
+        }
+      }
+
+      setRequests(((requestsData || []) as EmployeeRequest[]).filter((r: any) => r.status === 'pending'))
     } catch (error: any) {
       console.warn("Non-critical error loading some settings data:", error)
     } finally {
@@ -104,15 +115,26 @@ export default function SettingsPage() {
       }
 
       await loadData()
-      alert(`Employee ${request.employee_email} approved!`)
+      toast.success(`Employee ${request.employee_email} approved!`)
     } catch (error: any) {
-      alert("Failed to approve: " + error.message)
+      toast.error("Failed to approve: " + error.message)
+    }
+  }
+
+  const handleRejectRequest = async (requestId: string) => {
+    try {
+      const { error } = await supabaseRef.current.from("employee_requests").delete().eq("id", requestId)
+      if (error) throw error
+      toast.success("Request rejected")
+      await loadData()
+    } catch (error: any) {
+      toast.error("Failed to reject: " + error.message)
     }
   }
 
   const handleTogglePermission = async (employeeId: string, permission: string, currentValue: boolean) => {
     try {
-      await supabase
+      await supabaseRef.current
         .from("profiles")
         .update({ [permission]: !currentValue })
         .eq("id", employeeId)
@@ -143,7 +165,19 @@ export default function SettingsPage() {
     }
     setRequesting(true)
     try {
-      const { error } = await supabase
+      const { data: existing } = await supabaseRef.current
+        .from("membership_requests")
+        .select("id")
+        .eq("owner_id", profile?.id)
+        .eq("status", "pending")
+        .maybeSingle()
+
+      if (existing) {
+        alert("You already have a pending upgrade request. Please wait for admin approval.")
+        return
+      }
+
+      const { error } = await supabaseRef.current
         .from("membership_requests")
         .insert({
           owner_id: profile?.id,
@@ -244,6 +278,44 @@ export default function SettingsPage() {
                   </div>
                 </CardContent>
               </Card>
+
+              <Card className="bg-slate-900 border-slate-800 shadow-xl">
+                <CardHeader>
+                  <CardTitle className="text-lg font-bold text-white flex items-center gap-2">
+                    <Bell className="w-5 h-5 text-amber-400" />
+                    Automated Payment Reminders
+                  </CardTitle>
+                  <CardDescription>
+                    Automatically generate WhatsApp payment reminders & notifications for overdue sales orders (&gt; 3 days unpaid).
+                  </CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="flex items-center justify-between p-4 bg-slate-950 border border-slate-800 rounded-xl">
+                    <div className="space-y-1">
+                      <p className="text-sm font-bold text-white">Enable Auto Reminders</p>
+                      <p className="text-xs text-slate-400">
+                        Daily cron checks orders older than 3 days with pending balances and alerts owner with WhatsApp links.
+                      </p>
+                    </div>
+                    <Switch
+                      checked={autoPaymentReminders}
+                      onCheckedChange={async (checked) => {
+                        setAutoPaymentReminders(checked)
+                        if (!ownerId) return
+                        try {
+                          const { error } = await supabaseRef.current
+                            .from("user_configs")
+                            .upsert({ user_id: ownerId, auto_payment_reminders: checked }, { onConflict: "user_id" })
+                          if (error) throw error
+                          toast.success(`Auto payment reminders ${checked ? "enabled" : "disabled"}`)
+                        } catch (err: any) {
+                          toast.error("Failed to update reminder settings: " + err.message)
+                        }
+                      }}
+                    />
+                  </div>
+                </CardContent>
+              </Card>
             </div>
           )}
 
@@ -302,8 +374,7 @@ export default function SettingsPage() {
                         { id: "Multi-Tenancy Pack", label: "Multi-Tenancy Pack", desc: "Multi-Store & Branch Support", active: profile?.has_multi_tenancy_pack },
                         { id: "Core Modules Pack", label: "Core Modules Pack", desc: "Inventory, Sales, Accounting, AI Marketing", active: profile?.has_core_modules_pack },
                         { id: "AI Analysis Pack", label: "AI Analysis Pack", desc: "Natural Language Analytics & Forecasts", active: profile?.has_ai_analysis_pack },
-                        { id: "CRM Pack", label: "CRM Pack", desc: "Advanced Lead Management & Automation", active: profile?.has_crm_pack },
-                      ].map((pack) => (
+                        { id: "CRM Pack", label: "CRM Pack", desc: "Advanced Lead Management & Automation", active: profile?.has_crm_pack }].map((pack) => (
                         <div 
                           key={pack.id}
                           onClick={() => !pack.active && setSelectedPacks(prev => prev.includes(pack.id) ? prev.filter(p => p !== pack.id) : [...prev, pack.id])}
@@ -381,7 +452,7 @@ export default function SettingsPage() {
                       </div>
                       <div className="flex gap-2">
                         <Button size="sm" onClick={() => handleApproveRequest(req)} className="bg-emerald-600 hover:bg-emerald-700">Approve</Button>
-                        <Button size="sm" variant="ghost" className="text-red-400">Reject</Button>
+                        <Button size="sm" variant="ghost" className="text-red-400 hover:text-red-300 hover:bg-red-950/40" onClick={() => handleRejectRequest(req.id)}>Reject</Button>
                       </div>
                     </div>
                   ))}

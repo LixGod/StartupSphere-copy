@@ -9,13 +9,25 @@ function quickEntrySku(name: string): string {
   return `QE-${slug}-${Date.now().toString(36).slice(-4)}`
 }
 
-export async function getProducts(ownerId: string) {
-  const { data, error } = await supabase()
+export async function getProducts(ownerId: string, branchId?: string | null, strictBranch = false) {
+  let query = supabase()
     .from("products")
     .select("*")
     .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
 
+  if (branchId && branchId !== "global") {
+    if (strictBranch) {
+      // Inventory view: show ONLY products belonging to this exact branch
+      query = query.eq("location_id", branchId)
+    } else {
+      // POS / sales view: show branch products + global products (no location set)
+      // Products assigned to a DIFFERENT branch will NOT appear here
+      query = query.or(`location_id.eq.${branchId},location_id.is.null`)
+    }
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data || []) as Product[]
 }
@@ -61,6 +73,7 @@ export async function createProduct(product: Partial<Product> & { owner_id: stri
       const gstAmount = totalCost * purchaseGst
       await supabase().from("expenses").insert({
         owner_id: data.owner_id,
+        location_id: data.location_id || null,
         category: "Inventory Purchase",
         amount: totalCost,
         description: `Initial stock purchase for ${data.name} (${data.stock_quantity} units)`,

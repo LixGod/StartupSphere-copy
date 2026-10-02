@@ -337,9 +337,10 @@ export default function ReceiptPage({ params }: { params: Promise<{ id: string }
       <style jsx global>{`
         @media print {
           .no-print { display: none !important; }
-          body { background: white !important; }
-          .min-h-screen { py-0 !important; }
-          .shadow-2xl, .shadow-xl, .shadow-sm, .shadow-\\[0_20px_50px_rgba\\(0\\,0\\,0\\,0\\.1\\)\\] { shadow: none !important; }
+          body { background: white !important; color: black !important; margin: 0 !important; padding: 0 !important; }
+          .min-h-screen { py-0 !important; padding: 0 !important; }
+          .shadow-2xl, .shadow-xl, .shadow-sm, .shadow-\\[0_20px_50px_rgba\\(0\\,0\\,0\\,0\\.1\\)\\] { box-shadow: none !important; }
+          @page { size: auto; margin: 10mm; }
         }
       `}</style>
     </div>

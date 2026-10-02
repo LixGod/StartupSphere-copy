@@ -1,9 +1,10 @@
 "use client"
 
-import React, { useState } from "react"
+import React, { useState, useEffect } from "react"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
 import { useAccounting } from "@/lib/hooks/use-accounting"
 import { usePermissions } from "@/lib/hooks/use-permissions"
+import { useBranch } from "@/components/providers/branch-provider"
 import { GSTService } from "@/lib/services/gst"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -11,7 +12,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs"
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
 import { 
   TrendingUp, TrendingDown, DollarSign, Plus, Edit, Trash2, Printer, 
-  MessageCircle, Mail, ShieldCheck, Palette, Truck, FileJson, Search, Filter 
+  MessageCircle, Mail, ShieldCheck, Palette, Truck, FileJson, Search, Filter, Loader2 
 } from "lucide-react"
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
 import { Skeleton } from "@/components/ui/skeleton"
@@ -27,11 +28,14 @@ import type { Invoice, SalesOrder } from "@/lib/types"
 import type { BrandingSettings } from "@/components/accounting/invoice-design-studio"
 import { buildReceiptSearchParams, mergeBranding } from "@/lib/utils/receipt-branding"
 import { GSTIN_REGEX, MAX_FILE_SIZE_MB } from "@/lib/constants"
+import { ManufacturerSearch } from "@/components/ui/manufacturer-search"
+import { upsertManufacturer } from "@/lib/api/manufacturers"
+import { createClient } from "@/lib/supabase/client"
 import { getProducts } from "@/lib/api"
 import { incrementProductStock } from "@/lib/api/sales"
 import { VoiceInputButton } from "@/components/ui/voice-input-button"
 import { useVoiceFormFill } from "@/lib/hooks/use-voice-form-fill"
-import { Loader2 } from "lucide-react"
+import { PaymentSheet } from "@/components/ui/payment-sheet"
 import {
   Dialog,
   DialogContent,
@@ -131,8 +135,11 @@ function invoiceSharePayload(
 
 export default function AccountingPage() {
   const { profile, formatPrice, ownerId } = useBusinessContext()
-  const { isOwner, activeBranchId } = usePermissions()
+  const { isOwner, can } = usePermissions()
+  const { activeBranchId } = useBranch()
   const router = useRouter()
+  const supabase = createClient()
+  const canViewExpenses = isOwner || can('can_view_expenses')
   const [selectedLocationId, setSelectedLocationId] = useState<string>("global")
   
   React.useEffect(() => {
@@ -140,12 +147,14 @@ export default function AccountingPage() {
     if (locId) setSelectedLocationId(locId)
   }, [])
 
-  // Lock employees to their assigned branch
+  // Sync branch selector → location filter for all users (owner or employee)
   React.useEffect(() => {
-    if (!isOwner && activeBranchId) {
+    // If user hasn't chosen a specific branch (global) and an active branch exists, adopt it
+    if (selectedLocationId === "global" && activeBranchId) {
       setSelectedLocationId(activeBranchId)
     }
-  }, [isOwner, activeBranchId])
+    // Do not override when a branch is explicitly selected
+  }, [activeBranchId, selectedLocationId])
   
   const { 
     loading, 
@@ -168,6 +177,20 @@ export default function AccountingPage() {
   )
   const [selectedInvoiceIds, setSelectedInvoiceIds] = useState<string[]>([])
 
+  if (!canViewExpenses) {
+    return (
+      <div className="p-4 sm:p-8">
+        <div className="bg-slate-900 border border-slate-800 rounded-2xl p-8 sm:p-16 text-center shadow-2xl">
+          <div className="w-20 h-20 bg-red-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
+            <ShieldCheck className="w-10 h-10 text-red-500" />
+          </div>
+          <h2 className="text-2xl font-bold text-white mb-2">Access Restricted</h2>
+          <p className="text-slate-400 text-base max-w-md mx-auto">You do not have permission to view accounting data for this branch.</p>
+        </div>
+      </div>
+    )
+  }
+
   React.useEffect(() => {
     if (profile?.branding_settings) {
       const saved = profile.branding_settings as BrandingSettings
@@ -176,6 +199,10 @@ export default function AccountingPage() {
     }
   }, [profile?.branding_settings])
   const [selectedExpenseIds, setSelectedExpenseIds] = useState<string[]>([])
+  const [expensePaymentState, setExpensePaymentState] = useState<{ open: boolean; expense: any | null }>({
+    open: false,
+    expense: null,
+  })
   const [searchQuery, setSearchQuery] = useState("")
   const [isScanningBill, setIsScanningBill] = useState(false)
   const [showBillReview, setShowBillReview] = useState(false)
@@ -233,12 +260,24 @@ export default function AccountingPage() {
       toast.error("Enter a valid amount")
       return
     }
+    const vendor = expenseForm.vendor_name?.trim()
+    const desc = expenseForm.description?.trim()
     setSavingManualExpense(true)
     try {
-      const vendor = expenseForm.vendor_name.trim()
-      const desc =
-        expenseForm.description.trim() ||
-        (vendor ? `Expense — ${vendor}` : "Manual expense entry")
+      let savedMfrId: string | undefined = undefined
+      if (vendor) {
+        try {
+          const savedMfr = await upsertManufacturer({
+            owner_id: ownerId,
+            name: vendor,
+            amountToAdd: amount,
+          })
+          if (savedMfr?.id) savedMfrId = savedMfr.id
+        } catch (mErr) {
+          console.warn('Manufacturer auto-save skipped:', mErr)
+        }
+      }
+
       await addExpense({
         owner_id: ownerId,
         category: expenseForm.category.trim() || "general",
@@ -246,7 +285,9 @@ export default function AccountingPage() {
         description: desc,
         expense_date: new Date().toISOString().split("T")[0],
         gst_applicable: false,
+        manufacturer_id: savedMfrId,
       })
+
       toast.success("Expense saved")
       setExpenseForm({ category: "", amount: "", description: "", vendor_name: "" })
       setShowAddExpense(false)
@@ -342,8 +383,20 @@ export default function AccountingPage() {
 
     setIsSavingBill(true)
     try {
-      const vendor = billVendor.trim() || "Unknown Vendor"
-      const invoiceNo = billInvoiceNumber.trim() || "N/A"
+      let savedMfrId: string | undefined = undefined
+      if (vendor && vendor !== "Unknown Vendor") {
+        try {
+          const savedMfr = await upsertManufacturer({
+            owner_id: ownerId,
+            name: vendor,
+            gstin: billGstin.trim() || null,
+            amountToAdd: billGrandTotal,
+          })
+          if (savedMfr?.id) savedMfrId = savedMfr.id
+        } catch (mErr) {
+          console.warn('Manufacturer auto-save skipped:', mErr)
+        }
+      }
 
       await addExpense({
         owner_id: ownerId,
@@ -353,6 +406,7 @@ export default function AccountingPage() {
         expense_date: toExpenseDate(billInvoiceDate),
         gst_applicable: billGstAmount > 0,
         gst_amount: billGstAmount,
+        manufacturer_id: savedMfrId,
       })
 
       if (billUpdateInventory && billLineItems.length > 0) {
@@ -390,14 +444,66 @@ export default function AccountingPage() {
                 expenses.reduce((sum, exp) => sum + (exp.gst_amount || 0), 0)
   }
 
+  const moveToTrash = async (item: any, category: string, reason: string) => {
+    try {
+      await supabase.from("bill_trash").insert({
+        owner_id: ownerId,
+        category,
+        invoice_number: item.invoice_number || item.category || 'Expense',
+        customer_name: item.customer_name || item.vendor_name || item.description || 'N/A',
+        total_amount: item.amount || item.total_amount || 0,
+        order_date: item.expense_date || item.created_at || new Date().toISOString(),
+        reason,
+        original_data: item,
+        trashed_at: new Date().toISOString()
+      })
+    } catch (err) {
+      console.warn("Could not save item to trash:", err)
+    }
+  }
+
   const handleBulkDeleteInvoices = async () => {
     if (!selectedInvoiceIds.length) return
     try {
+      for (const id of selectedInvoiceIds) {
+        const inv = invoices.find(i => i.id === id)
+        if (inv) await moveToTrash(inv, 'accounting', 'Invoice deleted')
+      }
       await deleteInvoices(selectedInvoiceIds)
       setSelectedInvoiceIds([])
-      toast.success("Invoices deleted")
+      toast.success("Invoices deleted and moved to Trash")
     } catch (error) {
-      toast.error("Failed to delete")
+      toast.error("Failed to delete invoices")
+    }
+  }
+
+  const handleDeleteExpense = async (id: string) => {
+    if (!confirm("Are you sure you want to delete this expense record?")) return
+    try {
+      const exp = expenses.find(e => e.id === id)
+      if (exp) await moveToTrash(exp, 'accounting', 'Expense deleted')
+      await removeExpense(id)
+      toast.success("Expense deleted and moved to Trash")
+      loadData()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete expense")
+    }
+  }
+
+  const handleBulkDeleteExpenses = async () => {
+    if (!selectedExpenseIds.length) return
+    if (!confirm(`Are you sure you want to delete ${selectedExpenseIds.length} expense records?`)) return
+    try {
+      for (const id of selectedExpenseIds) {
+        const exp = expenses.find(e => e.id === id)
+        if (exp) await moveToTrash(exp, 'accounting', 'Expense deleted')
+      }
+      await deleteExpenses(selectedExpenseIds)
+      setSelectedExpenseIds([])
+      toast.success("Expenses deleted and moved to Trash")
+      loadData()
+    } catch (error: any) {
+      toast.error(error.message || "Failed to delete expenses")
     }
   }
 
@@ -418,14 +524,87 @@ export default function AccountingPage() {
   }
 
   const printExpense = (expense: any) => {
-    // For expenses, we can generate a simple voucher or just open the receipt if it exists
     if (expense.receipt_url) {
       window.open(expense.receipt_url, '_blank')
-    } else {
-      toast.info("No receipt attached. Printing expense voucher...")
-      // In a real app, you'd have a /receipt/expense/[id] route
-      window.print() 
+      return
     }
+    const win = window.open('', '_blank')
+    if (!win) {
+      toast.error("Please allow popups to print expense voucher")
+      return
+    }
+    const dateFormatted = expense.expense_date ? new Date(expense.expense_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : new Date().toLocaleDateString()
+    const vendorName = expense.manufacturers?.name || expense.vendor_name || ''
+    const currencySymbol = (profile as any)?.currency || profile?.base_currency || '₹'
+    const amountStr = `${currencySymbol} ${Number(expense.amount || 0).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`
+    
+    win.document.write(`
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Expense Voucher - ${expense.category || 'Expense'}</title>
+          <style>
+            body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; padding: 40px; color: #1e293b; max-width: 650px; margin: auto; }
+            .header { border-bottom: 2px solid #0284c7; padding-bottom: 15px; margin-bottom: 25px; display: flex; justify-content: space-between; align-items: center; }
+            .title { font-size: 24px; font-weight: bold; color: #0284c7; margin: 0; }
+            .badge { background: #e0f2fe; color: #0369a1; padding: 4px 12px; border-radius: 6px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
+            .row { display: flex; justify-content: space-between; padding: 12px 0; border-bottom: 1px solid #e2e8f0; }
+            .label { font-weight: 600; color: #64748b; font-size: 14px; }
+            .value { font-weight: 600; color: #0f172a; font-size: 14px; }
+            .amount-box { background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 20px; margin-top: 25px; text-align: right; }
+            .amount-label { font-size: 13px; color: #64748b; font-weight: 600; }
+            .amount-value { font-size: 28px; font-weight: 800; color: #0f172a; margin-top: 4px; }
+            .footer { margin-top: 50px; text-align: center; color: #94a3b8; font-size: 12px; border-top: 1px dashed #cbd5e1; padding-top: 15px; }
+            @media print {
+              body { padding: 20px; }
+            }
+          </style>
+        </head>
+        <body>
+          <div class="header">
+            <div>
+              <h1 class="title">EXPENSE VOUCHER</h1>
+              <p style="margin: 4px 0 0 0; font-size: 12px; color: #64748b;">Generated on ${new Date().toLocaleDateString()}</p>
+            </div>
+            <span class="badge">${expense.category || 'General'}</span>
+          </div>
+
+          <div class="row">
+            <span class="label">Voucher Date</span>
+            <span class="value">${dateFormatted}</span>
+          </div>
+          <div class="row">
+            <span class="label">Category</span>
+            <span class="value">${expense.category || 'General Expense'}</span>
+          </div>
+          ${vendorName ? `
+          <div class="row">
+            <span class="label">Vendor / Payee</span>
+            <span class="value">${vendorName}</span>
+          </div>` : ''}
+          <div class="row">
+            <span class="label">Description</span>
+            <span class="value">${expense.description || 'N/A'}</span>
+          </div>
+
+          <div class="amount-box">
+            <div class="amount-label">TOTAL AMOUNT PAID</div>
+            <div class="amount-value">${amountStr}</div>
+          </div>
+
+          <div class="footer">
+            StartupSphere Accounting Module • Official Expense Receipt
+          </div>
+
+          <script>
+            window.onload = function() {
+              window.print();
+            }
+          </script>
+        </body>
+      </html>
+    `)
+    win.document.close()
   }
 
   if (loading) return <div className="p-8 space-y-6"><Skeleton className="h-10 w-48" /><Skeleton className="h-64 w-full" /></div>
@@ -663,11 +842,12 @@ export default function AccountingPage() {
               className="bg-slate-950 border-slate-800 text-white"
               required
             />
-            <Input
-              placeholder="Vendor name (optional)"
+            <ManufacturerSearch
+              ownerId={ownerId || ""}
               value={expenseForm.vendor_name}
-              onChange={(e) => setExpenseForm({ ...expenseForm, vendor_name: e.target.value })}
-              className="bg-slate-950 border-slate-800 text-white"
+              placeholder="Vendor / Manufacturer name..."
+              onChange={(val) => setExpenseForm({ ...expenseForm, vendor_name: val })}
+              onSelect={(m) => setExpenseForm({ ...expenseForm, vendor_name: m.name })}
             />
             <Input
               placeholder="Description"
@@ -832,11 +1012,50 @@ export default function AccountingPage() {
 
         <TabsContent value="expenses">
           <Card className="bg-slate-900 border-slate-800 overflow-hidden">
+            {/* Expense Summary Banner */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 p-4 border-b border-slate-800 bg-slate-950/40">
+              <div className="bg-slate-900 border border-slate-800 p-4 rounded-xl">
+                <p className="text-xs text-slate-400 font-semibold uppercase tracking-wider">Total Expenses</p>
+                <p className="text-xl font-bold text-white mt-1">
+                  {formatPrice(expenses.reduce((sum, e) => sum + (Number(e.amount) || 0), 0))}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-emerald-900/40 p-4 rounded-xl">
+                <p className="text-xs text-emerald-400 font-semibold uppercase tracking-wider">Paid to Manufacturers</p>
+                <p className="text-xl font-bold text-emerald-400 mt-1">
+                  {formatPrice(expenses.reduce((sum, e) => sum + (Number(e.amount_paid) || 0), 0))}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-amber-900/40 p-4 rounded-xl">
+                <p className="text-xs text-amber-400 font-semibold uppercase tracking-wider">Outstanding to Manufacturers</p>
+                <p className="text-xl font-bold text-amber-500 mt-1">
+                  {formatPrice(expenses.reduce((sum, e) => {
+                    const isCogs = e.category === 'Cost of Goods Sold' || e.category?.toLowerCase().includes('cogs')
+                    if (isCogs || e.payment_status === 'paid') return sum
+                    const bal = e.balance_due !== undefined && e.balance_due !== null ? Number(e.balance_due) : Math.max(0, Number(e.amount) - (Number(e.amount_paid) || 0))
+                    return sum + bal
+                  }, 0))}
+                </p>
+              </div>
+              <div className="bg-slate-900 border border-rose-900/40 p-4 rounded-xl">
+                <p className="text-xs text-rose-400 font-semibold uppercase tracking-wider">Overdue Payments</p>
+                <p className="text-xl font-bold text-rose-500 mt-1">
+                  {expenses.filter((e) => {
+                    const isCogs = e.category === 'Cost of Goods Sold' || e.category?.toLowerCase().includes('cogs')
+                    const isPaid = isCogs || e.payment_status === "paid" || (Number(e.balance_due) <= 0 && Number(e.amount_paid) > 0)
+                    const expDate = new Date(e.expense_date).getTime()
+                    const thirtyDaysAgo = Date.now() - 30 * 24 * 60 * 60 * 1000
+                    return !isPaid && expDate < thirtyDaysAgo
+                  }).length} records
+                </p>
+              </div>
+            </div>
+
             <div className="p-4 border-b border-slate-800 flex flex-wrap justify-between items-center gap-2 bg-slate-900/50">
                <span className="text-xs font-bold text-slate-500 uppercase tracking-widest">Expense Ledger</span>
                <div className="flex flex-wrap items-center gap-2">
                {selectedExpenseIds.length > 0 && (
-                 <Button variant="destructive" size="sm">
+                 <Button variant="destructive" size="sm" onClick={handleBulkDeleteExpenses}>
                    <Trash2 className="w-4 h-4 mr-2" /> Delete {selectedExpenseIds.length}
                  </Button>
                )}
@@ -890,46 +1109,106 @@ export default function AccountingPage() {
                 { header: "Category", accessorKey: "category", className: "font-bold text-white" },
                 { header: "Description", accessorKey: "description" },
                 { header: "Date", accessorKey: "expense_date" },
-                { header: "Amount", accessorKey: (e) => <span className="font-bold text-rose-500">{formatPrice(e.amount)}</span> },
-                { header: "GST ITC", accessorKey: (e) => e.itc_eligible ? <Badge className="bg-emerald-500/10 text-emerald-500">YES</Badge> : <Badge className="bg-slate-800 text-slate-500">NO</Badge> },
-                { header: "Actions", accessorKey: (e) => (
-                  <div className="flex gap-2">
-                    {e.receipt_url && (
-                      <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400" onClick={() => window.open(e.receipt_url, '_blank')}>
-                        <Search className="w-4 h-4" />
-                      </Button>
-                    )}
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => printExpense(e)}>
-                      <Printer className="w-4 h-4" />
-                    </Button>
-                  </div>
-                )}
-              ]}
-              mobileCard={(e) => (
-                <div className="space-y-3">
-                   <div className="flex justify-between items-start">
-                     <div>
-                       <p className="text-sm font-bold text-white">{e.category}</p>
-                       <p className="text-xs text-slate-500">{e.description}</p>
-                     </div>
-                     <span className="font-bold text-rose-500">{formatPrice(e.amount)}</span>
-                   </div>
-                    <div className="flex justify-between items-center pt-2 border-t border-slate-800">
-                      <span className="text-[10px] text-slate-500">{e.expense_date}</span>
-                      <div className="flex items-center gap-2">
-                        {e.receipt_url && (
-                          <Button variant="ghost" size="sm" className="h-7 px-2 text-blue-400" onClick={() => window.open(e.receipt_url, '_blank')}>
-                            <Search className="w-3.5 h-3.5 mr-1" /> View
-                          </Button>
-                        )}
-                        <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-400" onClick={() => printExpense(e)}>
-                          <Printer className="w-3.5 h-3.5 mr-1" /> Print
+                { header: "Amount", accessorKey: (e) => <span className="font-bold text-rose-400">{formatPrice(e.amount)}</span> },
+                { header: "Payment Status", accessorKey: (e) => {
+                  const amtPaid = Number(e.amount_paid) || 0
+                  const balDue = e.balance_due !== undefined && e.balance_due !== null ? Number(e.balance_due) : Math.max(0, Number(e.amount) - amtPaid)
+                  const isFullyPaid = e.payment_status === 'paid' || (balDue <= 0 && amtPaid > 0)
+                  const isPartial = e.payment_status === 'partial' || (amtPaid > 0 && balDue > 0)
+
+                  return isFullyPaid ? (
+                    <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 font-bold">Paid ✓</Badge>
+                  ) : isPartial ? (
+                    <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 font-bold">Partial {formatPrice(amtPaid)} paid</Badge>
+                  ) : (
+                    <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 font-bold">Unpaid</Badge>
+                  )
+                }},
+                { header: "Actions", accessorKey: (e) => {
+                  const amtPaid = Number(e.amount_paid) || 0
+                  const balDue = e.balance_due !== undefined && e.balance_due !== null ? Number(e.balance_due) : Math.max(0, Number(e.amount) - amtPaid)
+                  const isFullyPaid = e.payment_status === 'paid' || (balDue <= 0 && amtPaid > 0)
+
+                  return (
+                    <div className="flex items-center gap-2">
+                      {!isFullyPaid && (
+                        <Button
+                          size="sm"
+                          onClick={() => setExpensePaymentState({ open: true, expense: e })}
+                          className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 h-8 text-xs font-bold px-2.5 transition-all"
+                        >
+                          💰 Record Payment
                         </Button>
-                        <Badge className="text-[9px] bg-slate-800 text-slate-400 uppercase ml-2">ITC {e.itc_eligible ? 'Eligible' : 'N/A'}</Badge>
-                      </div>
+                      )}
+                      {e.receipt_url && (
+                        <Button variant="ghost" size="icon" className="h-8 w-8 text-blue-400" onClick={() => window.open(e.receipt_url, '_blank')}>
+                          <Search className="w-4 h-4" />
+                        </Button>
+                      )}
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-slate-400" onClick={() => printExpense(e)}>
+                        <Printer className="w-4 h-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" className="h-8 w-8 text-rose-400 hover:text-rose-300 hover:bg-rose-500/10" onClick={() => handleDeleteExpense(e.id)}>
+                        <Trash2 className="w-4 h-4" />
+                      </Button>
                     </div>
-                </div>
-              )}
+                  )
+                }}
+              ]}
+              mobileCard={(e) => {
+                const amtPaid = Number(e.amount_paid) || 0
+                const balDue = e.balance_due !== undefined && e.balance_due !== null ? Number(e.balance_due) : Math.max(0, Number(e.amount) - amtPaid)
+                const isFullyPaid = e.payment_status === 'paid' || (balDue <= 0 && amtPaid > 0)
+                const isPartial = e.payment_status === 'partial' || (amtPaid > 0 && balDue > 0)
+
+                return (
+                  <div className="space-y-3">
+                     <div className="flex justify-between items-start">
+                       <div>
+                         <p className="text-sm font-bold text-white">{e.category}</p>
+                         <p className="text-xs text-slate-500">{e.description}</p>
+                       </div>
+                       <div className="text-right">
+                         <span className="font-bold text-rose-400">{formatPrice(e.amount)}</span>
+                         <div className="mt-1">
+                           {isFullyPaid ? (
+                             <Badge className="bg-emerald-500/10 text-emerald-400 border-emerald-500/20 text-[9px]">Paid ✓</Badge>
+                           ) : isPartial ? (
+                             <Badge className="bg-amber-500/10 text-amber-400 border-amber-500/20 text-[9px]">Partial {formatPrice(amtPaid)} paid</Badge>
+                           ) : (
+                             <Badge className="bg-rose-500/10 text-rose-400 border-rose-500/20 text-[9px]">Unpaid</Badge>
+                           )}
+                         </div>
+                       </div>
+                     </div>
+                      <div className="flex justify-between items-center pt-2 border-t border-slate-800">
+                        <span className="text-[10px] text-slate-500">{e.expense_date}</span>
+                        <div className="flex items-center gap-2">
+                          {!isFullyPaid && (
+                            <Button
+                              size="sm"
+                              onClick={() => setExpensePaymentState({ open: true, expense: e })}
+                              className="bg-emerald-600/20 hover:bg-emerald-600 text-emerald-400 hover:text-white border border-emerald-600/30 h-7 text-xs font-bold px-2"
+                            >
+                              💰 Payment
+                            </Button>
+                          )}
+                          {e.receipt_url && (
+                            <Button variant="ghost" size="sm" className="h-7 px-2 text-blue-400" onClick={() => window.open(e.receipt_url, '_blank')}>
+                              <Search className="w-3.5 h-3.5 mr-1" /> View
+                            </Button>
+                          )}
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-slate-400" onClick={() => printExpense(e)}>
+                            <Printer className="w-3.5 h-3.5 mr-1" /> Print
+                          </Button>
+                          <Button variant="ghost" size="sm" className="h-7 px-2 text-rose-400 hover:text-rose-300" onClick={() => handleDeleteExpense(e.id)}>
+                            <Trash2 className="w-3.5 h-3.5 mr-1" /> Delete
+                          </Button>
+                        </div>
+                      </div>
+                  </div>
+                )
+              }}
             />
             )}
           </Card>
@@ -943,7 +1222,25 @@ export default function AccountingPage() {
           />
         </TabsContent>
       </Tabs>
+
+      {/* Expense Payment Sheet */}
+      {expensePaymentState.expense && (
+        <PaymentSheet
+          open={expensePaymentState.open}
+          onOpenChange={(open) => setExpensePaymentState((prev) => ({ ...prev, open }))}
+          referenceType="purchase"
+          referenceId={expensePaymentState.expense.id}
+          title={`Expense: ${expensePaymentState.expense.category}`}
+          customerOrVendorName={expensePaymentState.expense.description || 'Vendor'}
+          totalAmount={Number(expensePaymentState.expense.amount) || 0}
+          amountPaid={Number(expensePaymentState.expense.amount_paid) || 0}
+          balanceDue={expensePaymentState.expense.balance_due !== undefined && expensePaymentState.expense.balance_due !== null ? Number(expensePaymentState.expense.balance_due) : Math.max(0, (Number(expensePaymentState.expense.amount) || 0) - (Number(expensePaymentState.expense.amount_paid) || 0))}
+          ownerId={expensePaymentState.expense.owner_id}
+          onPaymentRecorded={() => loadData()}
+        />
+      )}
     </div>
   )
 }
+
 

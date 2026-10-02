@@ -3,13 +3,13 @@ import type { Invoice } from "@/lib/types"
 
 const supabase = () => createClient()
 
-export async function getInvoices(ownerId: string, locationId?: string) {
+export async function getInvoices(ownerId: string, locationId?: string | null) {
   let query = supabase()
     .from("invoices")
     .select("*, sales_orders(*)")
     .eq("owner_id", ownerId)
 
-  if (locationId) {
+  if (locationId && locationId !== "global") {
     query = query.eq("location_id", locationId)
   }
 

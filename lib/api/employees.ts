@@ -15,15 +15,52 @@ export async function updateProfile(id: string, updates: Partial<Profile>) {
   return data as Profile
 }
 
-export async function getEmployeeRequests(ownerEmail: string) {
+export async function getEmployeeRequests(ownerId: string) {
   const { data, error } = await supabase()
     .from("employee_requests")
     .select("*")
-    .eq("owner_email", ownerEmail)
+    .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
 
   if (error) throw error
   return data || []
+}
+
+export async function getEmployees(ownerId: string) {
+  try {
+    const client = supabase()
+    const { data: profiles, error: profError } = await client
+      .from("profiles")
+      .select("*")
+      .eq("owner_id", ownerId)
+      .eq("role", "employee")
+      .order("created_at", { ascending: false })
+
+    if (profError) {
+      console.error("[getEmployees profiles error]:", profError)
+      throw new Error(profError.message || profError.details || "Failed to fetch employee profiles")
+    }
+    if (!profiles || profiles.length === 0) return []
+
+    // Fetch permissions separately to avoid PostgREST relationship schema cache join issues
+    const { data: perms } = await client
+      .from("employee_permissions")
+      .select("*")
+      .eq("owner_id", ownerId)
+
+    const permissionsList = perms || []
+
+    return profiles.map((emp) => {
+      const empPerms = permissionsList.filter((p: any) => p.employee_id === emp.id)
+      return {
+        ...emp,
+        employee_permissions: empPerms,
+      }
+    })
+  } catch (error: any) {
+    console.error("[getEmployees catch error]:", error?.message || error?.details || error)
+    throw new Error(error?.message || error?.details || "Failed to load employees")
+  }
 }
 
 export async function getNotifications(userId: string, limit = 20) {
@@ -130,12 +167,18 @@ export async function updateOwnerPacks(ownerId: string, updates: any) {
 }
 
 // Workflows
-export async function getWorkflows(ownerId: string) {
-  const { data, error } = await supabase()
+export async function getWorkflows(ownerId: string, branchId?: string | null) {
+  let query = supabase()
     .from("workflows")
     .select("*")
     .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
+
+  if (branchId && branchId !== "global") {
+    query = query.eq("location_id", branchId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return data
 }

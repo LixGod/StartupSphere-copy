@@ -5,13 +5,13 @@ import { getOrders } from "./sales"
 
 const supabase = () => createClient()
 
-export async function getExpenses(ownerId: string, locationId?: string) {
+export async function getExpenses(ownerId: string, locationId?: string | null) {
   let query = supabase()
     .from("expenses")
     .select("*")
     .eq("owner_id", ownerId)
 
-  if (locationId) {
+  if (locationId && locationId !== "global") {
     query = query.eq("location_id", locationId)
   }
 
@@ -46,12 +46,12 @@ export async function deleteExpenses(ids: string[]) {
   if (error) throw error
 }
 
-export async function getDashboardStats(ownerId: string, locationId?: string) {
+export async function getDashboardStats(ownerId: string, locationId?: string | null) {
   const now = new Date()
   const monthStart = new Date(now.getFullYear(), now.getMonth(), 1).toISOString()
 
   const [products, orders, expenses] = await Promise.all([
-    getProducts(ownerId),
+    getProducts(ownerId, locationId),
     getOrders(ownerId, locationId),
     getExpenses(ownerId, locationId),
   ])

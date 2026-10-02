@@ -1,10 +1,16 @@
 import { createClient } from '@/lib/supabase/server'
 import { NextResponse } from "next/server"
-import { Groq } from "groq-sdk"
 
-const groq = new Groq({
-  apiKey: process.env.GROQ_API_KEY,
-})
+let groqClient: any = null
+
+function getGroqClient() {
+  if (!process.env.GROQ_API_KEY) return null
+  if (!groqClient) {
+    const { Groq } = require("groq-sdk")
+    groqClient = new Groq({ apiKey: process.env.GROQ_API_KEY })
+  }
+  return groqClient
+}
 
 export async function POST(req: Request) {
     const supabase = await createClient()
@@ -41,6 +47,11 @@ export async function POST(req: Request) {
         "next_step": "string"
       }
     `
+
+    const groq = getGroqClient()
+    if (!groq) {
+      return NextResponse.json({ error: "Groq API key not configured" }, { status: 500 })
+    }
 
     const chatCompletion = await groq.chat.completions.create({
       messages: [

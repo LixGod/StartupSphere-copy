@@ -3,6 +3,7 @@
 import { useEffect, useState, useRef, useCallback } from "react"
 import { useAuth } from "@/components/providers/auth-provider"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
+import { useBranch } from "@/components/providers/branch-provider"
 import { getDashboardStats, getProducts, getOrders } from "@/lib/api"
 import { useRouter } from "next/navigation"
 import { DashboardOverview } from "@/components/dashboard-overview"
@@ -31,9 +32,12 @@ const CACHE_DURATION = 5 * 60 * 1000
 export default function OverviewPage() {
   const { user } = useAuth()
   const { ownerId, loading: contextLoading } = useBusinessContext()
+  const { activeBranchId } = useBranch()
   const [stats, setStats] = useState<any>(null)
   const [loading, setLoading] = useState(true)
   const [stockAlerts, setStockAlerts] = useState<StockAlert[]>([])
+  const [salesTargets, setSalesTargets] = useState<any[]>([])
+  const [slowMovingCount, setSlowMovingCount] = useState<number>(0)
   const [alertsLoading, setAlertsLoading] = useState(false)
   const [alertsLastUpdated, setAlertsLastUpdated] = useState<Date | null>(null)
   const alertsCacheRef = useRef<{ data: StockAlert[] | null; timestamp: number }>({
@@ -42,7 +46,7 @@ export default function OverviewPage() {
   })
   const router = useRouter()
 
-  const loadStockAlerts = useCallback(async (resolvedOwnerId: string) => {
+  const loadStockAlerts = useCallback(async (resolvedOwnerId: string, branchId?: string | null) => {
     if (
       alertsCacheRef.current.data &&
       Date.now() - alertsCacheRef.current.timestamp < CACHE_DURATION
@@ -53,11 +57,11 @@ export default function OverviewPage() {
 
     setAlertsLoading(true)
     try {
-      const products = await getProducts(resolvedOwnerId)
+      const products = await getProducts(resolvedOwnerId, branchId)
 
       const thirtyDaysAgo = new Date()
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30)
-      const orders = await getOrders(resolvedOwnerId)
+      const orders = await getOrders(resolvedOwnerId, branchId)
       const recentOrders = orders.filter(
         (o) => new Date(o.order_date) >= thirtyDaysAgo
       )
@@ -78,7 +82,7 @@ export default function OverviewPage() {
         min_stock_level: p.min_stock_level || 0,
         daily_sales_avg: parseFloat(((salesMap[p.id] || 0) / 30).toFixed(2)),
         supplier_name: p.manufacturer || null,
-        supplier_phone: null,
+        supplier_phone: (p as any).supplier_phone || (p as any).manufacturer_phone || null,
       }))
 
       const res = await fetch("/api/ai/forecast", {
@@ -93,6 +97,11 @@ export default function OverviewPage() {
       alertsCacheRef.current = { data: alerts, timestamp: Date.now() }
       setStockAlerts(alerts)
       setAlertsLastUpdated(new Date())
+
+      // Feature 8: Calculate Slow Moving Items
+      const activeProdIds = new Set(Object.keys(salesMap))
+      const slow = products.filter(p => (p.stock_quantity || 0) > (p.min_stock_level || 0) && !activeProdIds.has(p.id))
+      setSlowMovingCount(slow.length)
     } catch (err) {
       console.error("Stock alerts error:", err)
     } finally {
@@ -103,9 +112,19 @@ export default function OverviewPage() {
   const loadStats = async () => {
     if (!ownerId) return
     try {
-      const data = await getDashboardStats(ownerId)
+      const data = await getDashboardStats(ownerId, activeBranchId)
       setStats(data)
-      await loadStockAlerts(ownerId)
+      await loadStockAlerts(ownerId, activeBranchId)
+
+      // Feature 6: Fetch Sales Targets
+      const { createClient } = await import("@/lib/supabase/client")
+      const supabase = createClient()
+      const { data: targets } = await supabase
+        .from('sales_targets')
+        .select('*, profiles:employee_id(full_name, email)')
+        .eq('owner_id', ownerId)
+        .eq('status', 'active')
+      setSalesTargets(targets || [])
     } catch (error) {
       console.error("Error loading stats:", error)
     } finally {
@@ -117,7 +136,7 @@ export default function OverviewPage() {
     if (ownerId) {
       loadStats()
     }
-  }, [ownerId])
+  }, [ownerId, activeBranchId])
 
   if (!user) return null
 
@@ -236,8 +255,9 @@ export default function OverviewPage() {
                         <button
                           type="button"
                           onClick={() => {
-                            if (!alert.supplier_phone) return
-                            const phone = formatIndianPhone(alert.supplier_phone).replace(
+                            const rawPhone = alert.supplier_phone || (alert as any).manufacturer_phone
+                            if (!rawPhone) return
+                            const phone = formatIndianPhone(rawPhone).replace(
                               "+",
                               ""
                             )
@@ -247,9 +267,9 @@ export default function OverviewPage() {
                               "_blank"
                             )
                           }}
-                          disabled={!alert.supplier_phone}
+                          disabled={!alert.supplier_phone && !(alert as any).manufacturer_phone}
                           title={
-                            !alert.supplier_phone
+                            !alert.supplier_phone && !(alert as any).manufacturer_phone
                               ? "Add supplier phone in product settings"
                               : "Message supplier on WhatsApp"
                           }
@@ -267,6 +287,76 @@ export default function OverviewPage() {
                     </div>
                   </div>
                 ))}
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Feature 8: Slow Moving Inventory Alert Widget */}
+          {slowMovingCount > 0 && (
+            <Card className="bg-slate-900 border-amber-800/40">
+              <CardContent className="p-4 flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <div className="p-2.5 bg-amber-500/10 border border-amber-500/20 rounded-xl">
+                    <span className="text-xl">🐢</span>
+                  </div>
+                  <div>
+                    <h4 className="text-sm font-bold text-white flex items-center gap-2">
+                      Slow-Moving Inventory Alert
+                      <Badge className="bg-amber-500/20 text-amber-400 border-0">{slowMovingCount} items</Badge>
+                    </h4>
+                    <p className="text-xs text-slate-400">
+                      {slowMovingCount} products have stock on hand but zero sales in the last 30 days.
+                    </p>
+                  </div>
+                </div>
+                <Link
+                  href="/dashboard/inventory?filter=slow"
+                  className="px-3 py-1.5 bg-amber-500/20 hover:bg-amber-500/30 text-amber-300 border border-amber-500/40 text-xs font-semibold rounded-lg transition-colors shrink-0"
+                >
+                  Review Slow Stock →
+                </Link>
+              </CardContent>
+            </Card>
+          )}
+
+          {/* Feature 6: Sales Target Progress Card */}
+          {salesTargets.length > 0 && (
+            <Card className="bg-slate-900 border-slate-800 shadow-xl">
+              <CardHeader className="pb-3">
+                <CardTitle className="text-base font-bold text-white flex items-center justify-between">
+                  <span className="flex items-center gap-2">
+                    🎯 Employee Sales Targets
+                  </span>
+                  <Badge variant="outline" className="border-blue-500/30 text-blue-400 text-xs">
+                    Active Month
+                  </Badge>
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {salesTargets.map((st: any) => {
+                  const achieved = Number(st.sales_achieved) || 0
+                  const target = Number(st.target_amount) || 1
+                  const pct = Math.min(Math.round((achieved / target) * 100), 100)
+                  const empName = st.profiles?.full_name || st.profiles?.email || 'Employee'
+                  return (
+                    <div key={st.id} className="p-3 bg-slate-950 border border-slate-800 rounded-xl space-y-2">
+                      <div className="flex justify-between items-center text-xs">
+                        <span className="font-bold text-white">{empName}</span>
+                        <span className="text-slate-400">
+                          <strong className="text-blue-400">₹{achieved.toLocaleString('en-IN')}</strong> / ₹{target.toLocaleString('en-IN')} ({pct}%)
+                        </span>
+                      </div>
+                      <div className="w-full bg-slate-800 h-2 rounded-full overflow-hidden">
+                        <div
+                          className={`h-full transition-all duration-500 rounded-full ${
+                            pct >= 100 ? 'bg-emerald-500' : pct >= 50 ? 'bg-blue-500' : 'bg-amber-500'
+                          }`}
+                          style={{ width: `${pct}%` }}
+                        />
+                      </div>
+                    </div>
+                  )
+                })}
               </CardContent>
             </Card>
           )}

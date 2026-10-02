@@ -46,6 +46,16 @@ export function SalesInsightsTab({ ownerId }: SalesInsightsTabProps) {
       }
     })
 
+    // Pad last 7 days if fewer than 7 days recorded
+    for (let i = 6; i >= 0; i--) {
+      const d = new Date()
+      d.setDate(d.getDate() - i)
+      const dateStr = d.toISOString().split("T")[0]
+      if (!salesData[dateStr]) {
+        salesData[dateStr] = { date: dateStr, revenue: 0, orders: 0 }
+      }
+    }
+
     return Object.values(salesData).sort((a, b) => a.date.localeCompare(b.date))
   }, [ownerId])
 
@@ -58,7 +68,7 @@ export function SalesInsightsTab({ ownerId }: SalesInsightsTabProps) {
       try {
         const formattedData = await buildSalesData()
 
-        if (formattedData.length < 7) {
+        if (formattedData.length < 3) {
           setNotEnoughData(true)
           setInsights(null)
           return

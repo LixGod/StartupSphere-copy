@@ -58,7 +58,7 @@ export default function AutomationPage() {
       return
     }
     try {
-      await addWorkflow(newWorkflow)
+      await addWorkflow({ ...newWorkflow, owner_id: ownerId })
       setShowBuilder(false)
       setNewWorkflow({ name: "", trigger_type: "new_lead", steps: [] })
       toast.success("Workflow activated successfully")

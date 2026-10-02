@@ -22,35 +22,42 @@ export function useAccounting(ownerId: string | null, selectedLocationId: string
   const [expenses, setExpenses] = useState<Expense[]>([])
   const [orders, setOrders] = useState<SalesOrder[]>([])
   const [locations, setLocations] = useState<BusinessLocation[]>([])
-  const [error, setError] = useState<Error | null>(null)
+  const [error, setError] = useState<Error | null>(null);
+  console.log('useAccounting hook - selectedLocationId:', selectedLocationId);
 
   const loadData = useCallback(async () => {
-    if (!ownerId) return
-    setLoading(true)
+    if (!ownerId) return;
+    setLoading(true);
     try {
       const [invoicesData, expensesData, ordersData, locationsData] = await Promise.all([
         getInvoices(ownerId),
         getExpenses(ownerId),
         getOrders(ownerId),
         getLocations(ownerId)
-      ])
+      ]);
 
-      setInvoices(invoicesData)
-      setExpenses(expensesData)
-      setOrders(ordersData)
-      setLocations(locationsData)
-      setError(null)
+      // Filter by location if not global
+      const filteredInvoices = selectedLocationId === "global" ? invoicesData : invoicesData.filter(inv => inv.location_id === selectedLocationId);
+      const filteredExpenses = selectedLocationId === "global" ? expensesData : expensesData.filter(exp => exp.location_id === selectedLocationId);
+      const filteredOrders = selectedLocationId === "global" ? ordersData : ordersData.filter(ord => ord.location_id === selectedLocationId);
+
+      setInvoices(filteredInvoices);
+      setExpenses(filteredExpenses);
+      setOrders(filteredOrders);
+      setLocations(locationsData);
+      setError(null);
     } catch (err: any) {
-      console.error("Error loading accounting data:", err)
-      setError(err)
+      console.error("Error loading accounting data:", err);
+      setError(err);
     } finally {
-      setLoading(false)
+      setLoading(false);
     }
-  }, [ownerId])
+  }, [ownerId, selectedLocationId]);
 
+  // Reload when selected location changes
   useEffect(() => {
-    loadData()
-  }, [loadData])
+    loadData();
+  }, [loadData]);
 
   // Real-time
   useRealTime({

@@ -46,13 +46,18 @@ export async function createPipelineStage(stage: Partial<PipelineStage> & { owne
 
 // ---- Deals ----
 
-export async function getDeals(ownerId: string) {
-  const { data, error } = await supabase()
+export async function getDeals(ownerId: string, branchId?: string | null) {
+  let query = supabase()
     .from("deals")
     .select("*, contacts(*), companies(*), pipeline_stages(*)")
     .eq("owner_id", ownerId)
     .order("created_at", { ascending: false })
 
+  if (branchId && branchId !== "global") {
+    query = query.eq("location_id", branchId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data || []) as Deal[]
 }
@@ -106,8 +111,8 @@ export async function createFollowUpTask(task: Partial<FollowUpTask> & { owner_i
 
 // ---- Smart Alerts ----
 
-export async function getSmartAlerts(ownerId: string, limit = 50) {
-  const { data, error } = await supabase()
+export async function getSmartAlerts(ownerId: string, limit = 50, branchId?: string | null) {
+  let query = supabase()
     .from("smart_alerts")
     .select("*")
     .eq("owner_id", ownerId)
@@ -115,6 +120,11 @@ export async function getSmartAlerts(ownerId: string, limit = 50) {
     .order("created_at", { ascending: false })
     .limit(limit)
 
+  if (branchId && branchId !== "global") {
+    query = query.eq("location_id", branchId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data || []) as SmartAlert[]
 }
@@ -130,13 +140,18 @@ export async function resolveAlert(id: string) {
 
 // ---- Conversations & Messages ----
 
-export async function getConversations(ownerId: string) {
-  const { data, error } = await supabase()
+export async function getConversations(ownerId: string, branchId?: string | null) {
+  let query = supabase()
     .from("conversations")
     .select("*, contacts(*)")
     .eq("owner_id", ownerId)
     .order("last_message_at", { ascending: false })
 
+  if (branchId && branchId !== "global") {
+    query = query.eq("location_id", branchId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data || []) as (Conversation & { contacts: Contact })[]
 }
@@ -209,13 +224,18 @@ export async function getMessageTemplates(ownerId: string) {
 
 // ---- Helpdesk ----
 
-export async function getSupportTickets(ownerId: string) {
-  const { data, error } = await supabase()
+export async function getSupportTickets(ownerId: string, branchId?: string | null) {
+  let query = supabase()
     .from("support_tickets")
     .select("*, contacts(*)")
     .eq("owner_id", ownerId)
     .order("updated_at", { ascending: false })
 
+  if (branchId && branchId !== "global") {
+    query = query.eq("location_id", branchId)
+  }
+
+  const { data, error } = await query
   if (error) throw error
   return (data || []) as (SupportTicket & { contacts: Contact })[]
 }

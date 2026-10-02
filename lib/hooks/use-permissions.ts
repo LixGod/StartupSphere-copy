@@ -4,6 +4,7 @@ import { useEffect, useState, useCallback } from 'react'
 import { createClient } from '@/lib/supabase/client'
 import { useAuth } from '@/components/providers/auth-provider'
 import { useBusinessContext } from '@/lib/hooks/use-business-context'
+import { useBranch } from '@/components/providers/branch-provider'
 
 export interface BranchPermissions {
   branch_id: string
@@ -20,6 +21,8 @@ export interface BranchPermissions {
   can_view_reports: boolean
   can_view_employees: boolean
   is_branch_manager: boolean
+  // New permission for CRM access
+  can_access_crm: boolean
 }
 
 interface UsePermissionsReturn {
@@ -28,15 +31,15 @@ interface UsePermissionsReturn {
   assignedBranches: BranchPermissions[]
   currentPermissions: BranchPermissions | null
   isLoading: boolean
-  setActiveBranch: (branchId: string) => Promise<void>
+  setActiveBranch: (branchId: string | null) => void
   can: (permission: keyof BranchPermissions) => boolean
 }
 
 export function usePermissions(): UsePermissionsReturn {
   const { user } = useAuth()
   const { profile } = useBusinessContext()
+  const { activeBranchId, setActiveBranch } = useBranch()
   const [assignedBranches, setAssignedBranches] = useState<BranchPermissions[]>([])
-  const [activeBranchId, setActiveBranchId] = useState<string | null>(null)
   const [isLoading, setIsLoading] = useState(true)
   const supabase = createClient()
 
@@ -51,11 +54,6 @@ export function usePermissions(): UsePermissionsReturn {
     setIsLoading(true)
     try {
       if (isOwner) {
-        // Owners have all permissions on all branches
-        // Fetch active branch from profile if it exists
-        if (profile.active_branch_id) {
-          setActiveBranchId(profile.active_branch_id)
-        }
         setIsLoading(false)
         return
       }
@@ -63,10 +61,7 @@ export function usePermissions(): UsePermissionsReturn {
       // Load employee branch assignments
       const { data, error } = await supabase
         .from('employee_branch_assignments')
-        .select(`
-          *,
-          locations:branch_id (id, name)
-        `)
+        .select(`*, locations:branch_id (id, name), can_access_crm`)
         .eq('employee_id', user.id)
         .eq('is_active', true)
 
@@ -87,20 +82,11 @@ export function usePermissions(): UsePermissionsReturn {
         can_view_reports: a.can_view_reports,
         can_view_employees: a.can_view_employees,
         is_branch_manager: a.is_branch_manager,
+        // Map CRM permission, fallback to sales view if not provided
+        can_access_crm: typeof a.can_access_crm === 'boolean' ? a.can_access_crm : a.can_view_sales,
       }))
 
       setAssignedBranches(branches)
-
-      // Set active branch from profile or first assignment
-      const savedBranch = profile?.active_branch_id
-      if (savedBranch && branches.find(b => b.branch_id === savedBranch)) {
-        setActiveBranchId(savedBranch)
-      } else if (branches.length > 0) {
-        setActiveBranchId(branches[0].branch_id)
-      } else {
-        setActiveBranchId(null)
-      }
-
     } catch (err) {
       console.error('Failed to load permissions:', err)
     } finally {
@@ -112,28 +98,34 @@ export function usePermissions(): UsePermissionsReturn {
     loadPermissions()
   }, [loadPermissions])
 
-  const setActiveBranch = async (branchId: string) => {
-    setActiveBranchId(branchId || null)
-    // Save to profile so it persists
-    if (user) {
-      await supabase
-        .from('profiles')
-        .update({ active_branch_id: branchId || null })
-        .eq('id', user.id)
-    }
-  }
-
   const currentPermissions = activeBranchId
     ? assignedBranches.find(b => b.branch_id === activeBranchId) || null
     : null
 
-  // Permission checker
   const can = useCallback((permission: keyof BranchPermissions): boolean => {
     if (isOwner) return true // owners can do everything
-    if (!currentPermissions) return false
+
+    if (!currentPermissions) {
+      const fallback = {
+        can_view_sales: profile?.can_manage_sales,
+        can_create_sales: profile?.can_manage_sales,
+        can_delete_sales: profile?.can_manage_sales,
+        can_view_inventory: profile?.can_manage_inventory,
+        can_edit_inventory: profile?.can_manage_inventory,
+        can_delete_inventory: profile?.can_manage_inventory,
+        can_view_expenses: profile?.can_manage_accounting,
+        can_view_reports: profile?.can_manage_accounting,
+        can_view_employees: false,
+        // CRM fallback based on sales permission
+        can_access_crm: profile?.can_manage_sales,
+      } as Record<string, boolean | undefined>
+
+      return Boolean(fallback[permission as string])
+    }
+
     const val = currentPermissions[permission]
     return typeof val === 'boolean' ? val : false
-  }, [isOwner, currentPermissions])
+  }, [isOwner, currentPermissions, profile])
 
   return {
     isOwner,

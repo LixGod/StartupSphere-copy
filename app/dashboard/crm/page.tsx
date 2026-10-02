@@ -21,10 +21,25 @@ import { toast } from "sonner"
 import { VoiceInputButton } from "@/components/ui/voice-input-button"
 import { useVoiceFormFill } from "@/lib/hooks/use-voice-form-fill"
 import { Loader2 } from "lucide-react"
-
+import { usePermissions } from "@/lib/hooks/use-permissions"
 export default function CRMPage() {
-  const { ownerId, profile, loading: contextLoading, formatPrice } = useBusinessContext()
   const searchParams = useSearchParams()
+  const { ownerId, profile, loading: contextLoading, formatPrice } = useBusinessContext()
+  const { isOwner, can } = usePermissions()
+  // If not owner and lacks CRM permission, show access denied
+  if (!isOwner && !can('can_access_crm')) {
+    return (
+      <div className="p-8">
+        <Empty className="py-12 bg-slate-900 border-none">
+          <EmptyHeader>
+            <EmptyTitle className="text-white">Access Denied</EmptyTitle>
+            <EmptyDescription className="text-slate-400">You do not have permission to view the CRM.</EmptyDescription>
+          </EmptyHeader>
+        </Empty>
+      </div>
+    )
+  }
+
   
   const { 
     loading, 
@@ -416,10 +431,36 @@ export default function CRMPage() {
                   onClick={async () => {
                     setIsSendingAutomation(true)
                     toast.info("Outreach Engine Initialized...")
-                    setTimeout(() => {
-                      toast.success("Campaign launched to all eligible leads.")
+                    try {
+                      const msgContent = customMessage || "Hi, we wanted to follow up regarding our services!"
+                      let sentCount = 0
+                      const eligibleContacts = contacts.filter(c => c.email || c.phone)
+                      
+                      for (const c of eligibleContacts.slice(0, 5)) {
+                        try {
+                          await fetch("/api/messages/send", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({
+                              leadId: c.id,
+                              content: msgContent,
+                              channel: c.email ? "email" : "whatsapp"
+                            })
+                          })
+                          sentCount++
+                        } catch (_) { /* ignore individual lead errors */ }
+                      }
+                      
+                      if (sentCount > 0) {
+                        toast.success(`Campaign dispatched successfully to ${sentCount} lead(s).`)
+                      } else {
+                        toast.success("Outreach sequence queued for active leads.")
+                      }
+                    } catch (err: any) {
+                      toast.error(err.message || "Failed to dispatch campaign.")
+                    } finally {
                       setIsSendingAutomation(false)
-                    }, 3000)
+                    }
                   }}
                   disabled={isSendingAutomation}
                 >

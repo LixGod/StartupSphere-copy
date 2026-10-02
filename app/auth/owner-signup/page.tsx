@@ -40,16 +40,15 @@ export default function OwnerSignUpPage() {
 
     try {
       // 1. Check if email is in approved_owners
-      const { data: approved, error: checkError } = await supabase
+      const { data: approved } = await supabase
         .from("approved_owners")
         .select("*")
-        .eq("email", formData.email)
-        .single()
+        .ilike("email", formData.email.trim())
+        .maybeSingle()
 
-      if (!approved || checkError) {
+      if (!approved) {
         setError("Your email has not been authorized. Please request access first.");
         setLoading(false);
-        // Give the user a moment to read the error before redirecting or show a link
         return;
       }
 

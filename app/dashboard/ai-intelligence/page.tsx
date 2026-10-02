@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from "react"
 import { useBusinessContext } from "@/lib/hooks/use-business-context"
+import { useBranch } from "@/components/providers/branch-provider"
 import {
   getAIInsights,
   getOrders,
@@ -36,6 +37,7 @@ import type { AIInsight } from "@/lib/types"
 
 export default function AIIntelligencePage() {
   const { ownerId, loading: contextLoading } = useBusinessContext()
+  const { activeBranchId } = useBranch()
   const [loading, setLoading] = useState(true)
   const [metrics, setMetrics] = useState<IntelligenceMetrics | null>(null)
   const [insights, setInsights] = useState<AIInsight[]>([])
@@ -54,8 +56,8 @@ export default function AIIntelligencePage() {
       setLoading(true)
       try {
         const [orders, products, expenses, contacts, insightsData] = await Promise.all([
-          getOrders(ownerId),
-          getProducts(ownerId),
+          getOrders(ownerId, activeBranchId),
+          getProducts(ownerId, activeBranchId),
           getExpenses(ownerId),
           getContacts(ownerId),
           getAIInsights(ownerId),
@@ -90,7 +92,7 @@ export default function AIIntelligencePage() {
     return () => {
       cancelled = true
     }
-  }, [ownerId])
+  }, [ownerId, activeBranchId])
 
   const refreshPageData = async () => {
     if (!ownerId) return

@@ -37,7 +37,7 @@ import { Skeleton } from "@/components/ui/skeleton"
 
 export default function InboxPage() {
   const { ownerId, profile, loading: contextLoading } = useBusinessContext()
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   
   const [loading, setLoading] = useState(true)
   const [conversations, setConversations] = useState<(Conversation & { contacts: Contact })[]>([])
@@ -89,7 +89,7 @@ export default function InboxPage() {
       loadMessages(activeConversationId)
       
       // Subscribe to real-time messages for THIS conversation
-      const channel = supabase
+      const channel = supabaseRef.current
         .channel(`chat:${activeConversationId}`)
         .on(
           'postgres_changes',
@@ -102,13 +102,13 @@ export default function InboxPage() {
           (payload: any) => {
             const newMsg = payload.new as Message
             setMessages((prev) => [...prev, newMsg])
-            scrollToBottom()
+            setTimeout(scrollToBottom, 50)
           }
         )
         .subscribe()
 
       return () => {
-        supabase.removeChannel(channel)
+        supabaseRef.current.removeChannel(channel)
       }
     }
   }, [activeConversationId])
@@ -116,7 +116,7 @@ export default function InboxPage() {
   // 3. Global Conversation Real-time Updates (for the sidebar)
   useEffect(() => {
     if (ownerId) {
-      const channel = supabase
+      const channel = supabaseRef.current
         .channel('global-conversations')
         .on(
           'postgres_changes',
@@ -133,7 +133,7 @@ export default function InboxPage() {
         .subscribe()
 
       return () => {
-        supabase.removeChannel(channel)
+        supabaseRef.current.removeChannel(channel)
       }
     }
   }, [ownerId])

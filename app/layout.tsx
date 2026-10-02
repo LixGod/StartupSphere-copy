@@ -1,13 +1,7 @@
 import type React from "react"
 import type { Metadata, Viewport } from "next"
-import { Geist, Geist_Mono, Unbounded, DM_Sans } from "next/font/google"
 import { Analytics } from "@vercel/analytics/next"
 import "./globals.css"
-
-const _geist = Geist({ subsets: ["latin"] })
-const _geistMono = Geist_Mono({ subsets: ["latin"] })
-const unbounded = Unbounded({ subsets: ["latin"], variable: "--font-unbounded" })
-const dmSans = DM_Sans({ subsets: ["latin"], variable: "--font-dm-sans" })
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -53,7 +47,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en" className="dark">
-      <body className={`font-sans antialiased ${unbounded.variable} ${dmSans.variable}`}>
+      <body className="font-sans antialiased">
         {children}
         <Analytics />
       </body>

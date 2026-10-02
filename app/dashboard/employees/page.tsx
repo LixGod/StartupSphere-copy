@@ -1,27 +1,33 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useRef } from "react"
 import { createClient } from "@/lib/supabase/client"
+import { getEmployees, getEmployeeRequests, getLocations } from "@/lib/api"
 import { Button } from "@/components/ui/button"
 import { UserPlus, CheckCircle, XCircle, Clock, Shield } from "lucide-react"
 import { useToast } from "@/components/ui/use-toast"
 import { Empty, EmptyHeader, EmptyTitle, EmptyDescription, EmptyContent } from "@/components/ui/empty"
+import { Sheet } from "@/components/ui/sheet"
+import { PermissionManager } from "@/components/employees/permission-manager"
 import { BranchAssignmentModal } from "@/components/employees/branch-assignment-modal"
 
 export default function EmployeesPage() {
   const [employees, setEmployees] = useState<any[]>([])
   const [requests, setRequests] = useState<any[]>([])
+  const [branches, setBranches] = useState<any[]>([])
   const [loading, setLoading] = useState(true)
   const [profile, setProfile] = useState<any>(null)
-  const supabase = createClient()
+  const supabaseRef = useRef(createClient())
   const { toast } = useToast()
   const [selectedEmployee, setSelectedEmployee] = useState<any>(null)
   const [isBranchModalOpen, setIsBranchModalOpen] = useState(false)
+  const [selectedEmployeeForPerms, setSelectedEmployeeForPerms] = useState<any>(null)
+  const [isPermModalOpen, setIsPermModalOpen] = useState(false)
 
   useEffect(() => {
     loadData()
 
-    const channel = supabase
+    const channel = supabaseRef.current
       .channel("employee-changes")
       .on("postgres_changes", { event: "*", schema: "public", table: "profiles" }, () => {
         loadData()
@@ -29,77 +35,63 @@ export default function EmployeesPage() {
       .on("postgres_changes", { event: "*", schema: "public", table: "employee_requests" }, () => {
         loadData()
       })
+      .on("postgres_changes", { event: "*", schema: "public", table: "employee_permissions" }, () => {
+        loadData()
+      })
       .subscribe()
 
     return () => {
-      supabase.removeChannel(channel)
+      supabaseRef.current.removeChannel(channel)
     }
   }, [])
 
   const loadData = async () => {
     setLoading(true)
-    const {
-      data: { user },
-    } = await supabase.auth.getUser()
-    if (!user) {
-      setLoading(false)
-      return
-    }
+    try {
+      const {
+        data: { user },
+      } = await supabaseRef.current.auth.getUser()
+      if (!user) return
 
-    // Load user profile
-    const { data: profileData, error: profileError } = await supabase.from("profiles").select("*").eq("id", user.id).single()
-    
-    if (profileError) {
-      console.error("Error fetching profile:", profileError)
-      setLoading(false)
-      return
-    }
-    
-    setProfile(profileData)
-
-    if (profileData?.role === "owner") {
-      // Load active employees by owner_id
-      const { data: empData, error: empError } = await supabase
+      const { data: profileData, error: profileError } = await supabaseRef.current
         .from("profiles")
         .select("*")
-        .eq("owner_id", user.id)
-        .eq("role", "employee")
+        .eq("id", user.id)
+        .single()
       
-      if (empError) {
-        console.error("Error loading employees:", empError)
-      } else {
-        // Removed console.log for production
+      if (profileError) {
+        console.error("Error fetching profile:", profileError)
+        return
       }
-      setEmployees(empData || [])
+      
+      setProfile(profileData)
 
-      // Load pending requests by owner email
-      // Removed console.log for production
-      
-      const { data: reqData, error: reqError } = await supabase
-        .from("employee_requests")
-        .select("*")
-        .eq("owner_email", user.email)
-        .eq("status", "pending")
-        .order("created_at", { ascending: false })
-      
-      if (reqError) {
-        console.error("❌ Error loading employee requests:", reqError)
-        console.error("RLS or query error details:", reqError.message)
-      } else {
-        // Removed console.log for production
+      if (profileData?.role === "owner" || profileData?.role === "admin") {
+        const ownerId = profileData.id
+        const [empData, reqData, locData] = await Promise.all([
+          getEmployees(ownerId),
+          getEmployeeRequests(ownerId),
+          getLocations(ownerId),
+        ])
+
+        setEmployees(empData || [])
+        setRequests((reqData || []).filter((request: any) => request.status === "pending"))
+        setBranches(locData || [])
       }
-      
-      setRequests(reqData || [])
+    } catch (err: any) {
+      console.error("Error loading employee data:", err)
+      toast({
+        title: "Error loading employees",
+        description: err.message || "Could not load employee list",
+        variant: "destructive",
+      })
+    } finally {
+      setLoading(false)
     }
-
-    setLoading(false)
   }
 
   const handleApproveRequest = async (request: any) => {
     try {
-      // Removed console.log for production
-
-      // Use API route to create user and profile (uses admin API, no email confirmation needed)
       const response = await fetch('/api/approve-employee', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -115,20 +107,16 @@ export default function EmployeesPage() {
       const result = await response.json()
 
       if (!response.ok) {
-        console.error("❌ API Error:", result.error)
         throw new Error(result.error)
       }
-
-      // Removed console.log for production
       
-      // Reload data to refresh the UI
       await loadData()
       toast({
         title: "Success",
         description: `Employee ${request.employee_email} has been approved`,
       })
     } catch (error) {
-      console.error("❌ Error approving request:", error)
+      console.error("Error approving request:", error)
       toast({
         title: "Error",
         description: error instanceof Error ? error.message : "Failed to approve employee",
@@ -139,40 +127,16 @@ export default function EmployeesPage() {
 
   const handleRejectRequest = async (requestId: string) => {
     try {
-      // Removed console.log for production
-      
-      const { error } = await supabase.from("employee_requests").delete().eq("id", requestId)
-
-      if (error) {
-        console.error("❌ Delete error:", error)
-        throw error
-      }
-
-      // Removed console.log for production
-      
+      const { error } = await supabaseRef.current.from("employee_requests").delete().eq("id", requestId)
+      if (error) throw error
       await loadData()
-      alert("Request rejected and removed.")
+      toast({ title: "Request Rejected", description: "Request removed." })
     } catch (error: any) {
-      console.error("❌ Error rejecting request:", error)
-      alert("Error rejecting request: " + error.message)
+      toast({ title: "Error", description: error.message, variant: "destructive" })
     }
   }
 
-  const handleTogglePermission = async (employeeId: string, permission: string, currentValue: boolean) => {
-    try {
-      await supabase
-        .from("profiles")
-        .update({ [permission]: !currentValue })
-        .eq("id", employeeId)
-
-      loadData()
-      alert("Permission updated successfully!")
-    } catch (error: any) {
-      alert("Error updating permission: " + error.message)
-    }
-  }
-
-  if (profile?.role !== "owner") {
+  if (profile?.role !== "owner" && profile?.role !== "admin") {
     return (
       <div className="p-8">
         <div className="bg-slate-900 border border-slate-800 rounded-xl p-12 text-center">
@@ -186,7 +150,7 @@ export default function EmployeesPage() {
     <div className="p-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold text-white">Employee Management</h1>
-        <p className="text-slate-400 mt-1">Manage your team and approval requests</p>
+        <p className="text-slate-400 mt-1">Manage your team, roles, and access permissions</p>
       </div>
 
       {/* Pending Requests */}
@@ -249,76 +213,92 @@ export default function EmployeesPage() {
               <table className="w-full">
                 <thead className="border-b border-slate-800 bg-slate-950">
                   <tr>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Email</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Employee</th>
                     <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Joined</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Global Permissions</th>
-                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Branches</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Module Access</th>
+                    <th className="px-6 py-4 text-left text-sm font-semibold text-slate-300">Actions</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-800">
-                  {employees.map((emp) => (
-                    <tr key={emp.id} className="hover:bg-slate-800/50 transition-colors">
-                      <td className="px-6 py-4">
-                        <p className="text-white text-sm font-medium">{emp.email}</p>
-                        <p className="text-slate-500 font-mono text-xs mt-0.5">{emp.id.slice(0, 8)}...</p>
-                      </td>
-                      <td className="px-6 py-4 text-slate-400">{new Date(emp.created_at).toLocaleDateString()}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex gap-2 flex-wrap">
-                          <button
-                            onClick={() =>
-                              handleTogglePermission(emp.id, "can_manage_inventory", emp.can_manage_inventory)
-                            }
-                            className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full transition-all ${
-                              emp.can_manage_inventory
-                                ? "bg-blue-600/20 text-blue-400 border border-blue-600/30 hover:bg-blue-600/30"
-                                : "bg-slate-800 text-slate-500 border border-slate-700 hover:bg-slate-700"
-                            }`}
-                          >
-                            <Shield className="w-3 h-3" />
-                            Inventory
-                          </button>
-                          <button
-                            onClick={() => handleTogglePermission(emp.id, "can_manage_sales", emp.can_manage_sales)}
-                            className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full transition-all ${
-                              emp.can_manage_sales
-                                ? "bg-green-600/20 text-green-400 border border-green-600/30 hover:bg-green-600/30"
-                                : "bg-slate-800 text-slate-500 border border-slate-700 hover:bg-slate-700"
-                            }`}
-                          >
-                            <Shield className="w-3 h-3" />
-                            Sales
-                          </button>
-                          <button
-                            onClick={() =>
-                              handleTogglePermission(emp.id, "can_manage_accounting", emp.can_manage_accounting)
-                            }
-                            className={`inline-flex items-center gap-1 px-3 py-1 text-xs font-medium rounded-full transition-all ${
-                              emp.can_manage_accounting
-                                ? "bg-amber-600/20 text-amber-400 border border-amber-600/30 hover:bg-amber-600/30"
-                                : "bg-slate-800 text-slate-500 border border-slate-700 hover:bg-slate-700"
-                            }`}
-                          >
-                            <Shield className="w-3 h-3" />
-                            Accounting
-                          </button>
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          className="border-slate-800 text-xs text-blue-400 hover:bg-blue-600/10 hover:text-blue-300"
-                          onClick={() => {
-                            setSelectedEmployee(emp)
-                            setIsBranchModalOpen(true)
-                          }}
-                        >
-                          Manage Branch Access
-                        </Button>
-                      </td>
-                    </tr>
-                  ))}
+                  {employees.map((emp) => {
+                    const activePerms = emp.employee_permissions?.[0]
+                    return (
+                      <tr key={emp.id} className="hover:bg-slate-800/50 transition-colors">
+                        <td className="px-6 py-4">
+                          <p className="text-white text-sm font-medium">{emp.full_name || emp.email}</p>
+                          <p className="text-slate-400 text-xs">{emp.email}</p>
+                        </td>
+                        <td className="px-6 py-4 text-slate-400 text-sm">{new Date(emp.created_at).toLocaleDateString()}</td>
+                        <td className="px-6 py-4">
+                          <div className="flex gap-1.5 flex-wrap">
+                            {activePerms?.can_access_sales && <span className="px-2 py-0.5 text-xs bg-green-500/20 text-green-300 border border-green-500/30 rounded-full">Sales</span>}
+                            {activePerms?.can_access_inventory && <span className="px-2 py-0.5 text-xs bg-blue-500/20 text-blue-300 border border-blue-500/30 rounded-full">Inventory</span>}
+                            {activePerms?.can_access_accounting && <span className="px-2 py-0.5 text-xs bg-amber-500/20 text-amber-300 border border-amber-500/30 rounded-full">Accounting</span>}
+                            {activePerms?.can_access_crm && <span className="px-2 py-0.5 text-xs bg-purple-500/20 text-purple-300 border border-purple-500/30 rounded-full">CRM</span>}
+                            {!activePerms && <span className="px-2 py-0.5 text-xs bg-slate-800 text-slate-400 rounded-full">No permissions set</span>}
+                          </div>
+                        </td>
+                        <td className="px-6 py-4">
+                          <div className="flex items-center gap-2 flex-wrap">
+                            <Button
+                              size="sm"
+                              className="bg-blue-600 hover:bg-blue-700 text-xs text-white"
+                              onClick={() => {
+                                setSelectedEmployeeForPerms(emp)
+                                setIsPermModalOpen(true)
+                              }}
+                            >
+                              <Shield className="w-3 h-3 mr-1" />
+                              Permissions
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-emerald-800 text-xs text-emerald-400 hover:bg-emerald-950/50"
+                              onClick={() => {
+                                const target = prompt(`Enter monthly sales target (₹) for ${emp.full_name || emp.email}:`, "50000")
+                                if (target && !isNaN(Number(target))) {
+                                  const start = new Date(new Date().getFullYear(), new Date().getMonth(), 1).toISOString().slice(0, 10)
+                                  const end = new Date(new Date().getFullYear(), new Date().getMonth() + 1, 0).toISOString().slice(0, 10)
+                                  supabaseRef.current
+                                    .from('sales_targets')
+                                    .insert({
+                                      owner_id: profile.id,
+                                      employee_id: emp.id,
+                                      target_amount: Number(target),
+                                      period_start: start,
+                                      period_end: end,
+                                      sales_achieved: 0,
+                                      status: 'active'
+                                    })
+                                    .then(({ error }) => {
+                                      if (error) alert("Error setting target: " + error.message)
+                                      else {
+                                        toast({ title: "Target Set!", description: `₹${Number(target).toLocaleString('en-IN')} target assigned to ${emp.email}` })
+                                        loadData()
+                                      }
+                                    })
+                                }
+                              }}
+                            >
+                              🎯 Set Target
+                            </Button>
+                            <Button
+                              size="sm"
+                              variant="outline"
+                              className="border-slate-800 text-xs text-slate-300 hover:bg-slate-800"
+                              onClick={() => {
+                                setSelectedEmployee(emp)
+                                setIsBranchModalOpen(true)
+                              }}
+                            >
+                              Branch Access
+                            </Button>
+                          </div>
+                        </td>
+                      </tr>
+                    )
+                  })}
                 </tbody>
               </table>
             </div>
@@ -336,7 +316,27 @@ export default function EmployeesPage() {
           employee={selectedEmployee}
         />
       )}
+
+      {selectedEmployeeForPerms && (
+        <Sheet open={isPermModalOpen} onOpenChange={(open) => {
+          setIsPermModalOpen(open)
+          if (!open) setSelectedEmployeeForPerms(null)
+        }}>
+          <PermissionManager
+            employee={selectedEmployeeForPerms}
+            ownerId={profile?.id}
+            branches={branches}
+            isMultiBranch={branches.length > 1}
+            onClose={() => {
+              setIsPermModalOpen(false)
+              setSelectedEmployeeForPerms(null)
+              loadData()
+            }}
+          />
+        </Sheet>
+      )}
     </div>
   )
 }
+
 
