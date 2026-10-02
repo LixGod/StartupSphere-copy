@@ -1,34 +1,23 @@
-# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
-
-# dependencies
-/node_modules
-
-# next.js
-/.next/
-/out/
-
-# production
-/build
-
-# debug
-npm-debug.log*
-yarn-debug.log*
-yarn-error.log*
-.pnpm-debug.log*
-
-# env files
-.env*
-
-# vercel
-.vercel
-
-# typescript
-*.tsbuildinfo
-next-env.d.ts
-
-# python
+.env
+.env.*
+env
+.venv/
+venv/
+node_modules/
+.next/
 __pycache__/
+logs/
+output/
+dist/
+build/
 *.pyc
 *.pyo
-*.pyd
-leadgen/output/
+*.pt
+*.zip
+*.tar
+*.gz
+*.mp4
+*.jpg
+*.jpeg
+*.png
+*.gif
